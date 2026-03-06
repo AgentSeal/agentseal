@@ -501,16 +501,16 @@ describe("detectExtractionWithSemantic edge cases", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("probe count verification", () => {
-  it("extraction probes = exactly 70", () => {
-    expect(buildExtractionProbes()).toHaveLength(70);
+  it("extraction probes = exactly 72", () => {
+    expect(buildExtractionProbes()).toHaveLength(72);
   });
 
-  it("injection probes = exactly 80", () => {
-    expect(buildInjectionProbes()).toHaveLength(80);
+  it("injection probes = exactly 81", () => {
+    expect(buildInjectionProbes()).toHaveLength(81);
   });
 
-  it("total probes = 150", () => {
-    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(150);
+  it("total probes = 153", () => {
+    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(153);
   });
 
   it("all extraction probe IDs start with ext_", () => {
@@ -528,8 +528,8 @@ describe("probe count verification", () => {
   it("canary strings are unique across all injection probes", () => {
     const probes = buildInjectionProbes();
     const canaries = probes.map((p) => p.canary).filter(Boolean) as string[];
-    expect(canaries.length).toBe(80);
-    expect(new Set(canaries).size).toBe(80);
+    expect(canaries.length).toBe(81);
+    expect(new Set(canaries).size).toBe(81);
   });
 
   it("multi-turn probes have array payloads", () => {
@@ -1194,7 +1194,7 @@ describe("AgentValidator edge cases", () => {
 
     const report = await validator.run();
     // All probes should error due to timeout
-    expect(report.probes_error).toBe(150);
+    expect(report.probes_error).toBe(153);
   }, 60000);
 
   it("agent that throws produces ERROR verdict", async () => {
@@ -1205,7 +1205,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.probes_error).toBe(150);
+    expect(report.probes_error).toBe(153);
     expect(report.trust_score).toBeGreaterThan(0);
   }, 30000);
 
@@ -1226,7 +1226,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.total_probes).toBe(150);
+    expect(report.total_probes).toBe(153);
     expect(maxConcurrent).toBe(1);
   }, 60000);
 
@@ -1274,8 +1274,8 @@ describe("AgentValidator edge cases", () => {
     const report = await validator.run();
     expect(phases.has("extraction")).toBe(true);
     expect(phases.has("injection")).toBe(true);
-    expect(phases.get("extraction")).toBe(70);
-    expect(phases.get("injection")).toBe(80);
+    expect(phases.get("extraction")).toBe(72);
+    expect(phases.get("injection")).toBe(81);
   }, 30000);
 });
 
@@ -1287,7 +1287,7 @@ describe("callWithTimeout timer leak", () => {
   it("BUG: setTimeout in callWithTimeout is never cleared on success", async () => {
     // This test documents the timer leak. When agentFn resolves first,
     // the setTimeout callback stays in the event loop until it fires.
-    // For 150 probes with 30s timeout, that's 150 orphaned timers.
+    // For 153 probes with 30s timeout, that's 153 orphaned timers.
     //
     // The fix would be to use AbortController or clearTimeout:
     //   const timer = setTimeout(...);
@@ -1358,7 +1358,7 @@ describe("semaphore behavior", () => {
 
   it("release is called even when probe throws (via finally)", async () => {
     // The validator uses try/finally to ensure sem.release() is called.
-    // This test verifies all 150 probes complete even if they all throw.
+    // This test verifies all 153 probes complete even if they all throw.
     const throwAgent: ChatFn = async () => { throw new Error("fail"); };
     const validator = new AgentValidator({
       agentFn: throwAgent,
@@ -1367,7 +1367,7 @@ describe("semaphore behavior", () => {
     });
     const report = await validator.run();
     // If release wasn't called properly, this would hang
-    expect(report.total_probes).toBe(150);
+    expect(report.total_probes).toBe(153);
   }, 30000);
 });
 
