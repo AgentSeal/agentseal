@@ -130,14 +130,14 @@ describe("1. Scoring parity", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("2. Probe count parity", () => {
-  it("extraction probes: exactly 72", () => {
+  it("extraction probes: exactly 82", () => {
     const probes = buildExtractionProbes();
-    expect(probes.length).toBe(72);
+    expect(probes.length).toBe(82);
   });
 
-  it("injection probes: exactly 81", () => {
+  it("injection probes: exactly 91", () => {
     const probes = buildInjectionProbes();
-    expect(probes.length).toBe(81);
+    expect(probes.length).toBe(91);
   });
 
   it("extraction probe IDs are unique", () => {
@@ -165,6 +165,12 @@ describe("2. Probe count parity", () => {
       "low_resource_language", "translation_trick", "summarization_trick",
       "typo_obfuscation",
       "ascii_smuggling",
+      "token_break",
+      "variation_selector",
+      "bidi_text",
+      "context_dilution",
+      "attention_shifting",
+      "many_shot_extended",
     ]);
     expect(categories).toEqual(expectedCategories);
   });
@@ -184,6 +190,8 @@ describe("2. Probe count parity", () => {
       "unicode_injection", "cognitive_overload", "fictional_authority",
       "reward_hacking", "sandwich_injection", "few_shot_injection",
       "markdown_exfiltration", "ascii_smuggling",
+      "token_break", "variation_selector", "bidi_text",
+      "context_dilution", "attention_shifting", "many_shot_extended",
     ]);
     expect(categories).toEqual(expectedCategories);
   });
