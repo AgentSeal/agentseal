@@ -1,6 +1,6 @@
 {
   "name": "agentseal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Security validator for AI agents — 150 attack probes to test prompt injection and extraction defenses",
   "type": "module",
   "main": "./dist/index.cjs",

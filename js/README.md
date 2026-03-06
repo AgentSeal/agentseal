@@ -1,19 +1,41 @@
-# agentseal
+# AgentSeal
 
-Security validator for AI agents — 150 attack probes to test prompt injection and extraction defenses.
+Find out if your AI agent can be hacked. Before someone else does.
 
 [![npm](https://img.shields.io/npm/v/agentseal)](https://www.npmjs.com/package/agentseal)
-[![License: FSL-1.1-Apache-2.0](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](../LICENSE)
+[![License](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](../LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 
-## Install
+> **[agentseal.org](https://agentseal.org)** : Dashboard, scan history, PDF reports, and more.
+
+## Why AgentSeal?
+
+Your system prompt contains proprietary instructions, business logic, and behavioral rules. Attackers use prompt injection and extraction techniques to steal or override this data.
+
+AgentSeal sends 150 automated attack probes at your agent and tells you exactly what broke, why it broke, and how to fix it. Every scan is deterministic. No AI judge. Same input, same result, every time.
+
+## Open Source vs Hosted
+
+| | Open Source | Hosted ([agentseal.org](https://agentseal.org)) |
+|---|---|---|
+| **Price** | Free | Free tier available |
+| **Setup** | Bring your own API keys | Zero configuration |
+| **Probes** | 150 (extraction + injection) | 196 (+ MCP + RAG) |
+| **Mutations** | 8 adaptive transforms | 8 adaptive transforms |
+| **Reports** | JSON output | Interactive dashboard + PDF |
+| **History** | Manual tracking | Full scan history and trends |
+| **CI/CD** | `--min-score` flag | Built-in |
+| **Extras** | | Behavioral genome mapping |
+
+[Try the hosted version](https://agentseal.org)
+
+## Installation
 
 ```bash
 npm install agentseal
 ```
 
 ## Quick Start
-
-### With OpenAI
 
 ```typescript
 import { AgentValidator } from "agentseal";
@@ -27,85 +49,81 @@ const validator = AgentValidator.fromOpenAI(client, {
 });
 
 const report = await validator.run();
-console.log(`Trust Score: ${report.trust_score}/100 (${report.trust_level})`);
+
+console.log(`Score: ${report.trust_score}/100`);
+console.log(`Level: ${report.trust_level}`);
+console.log(`Extraction resistance: ${report.score_breakdown.extraction_resistance}`);
+console.log(`Injection resistance: ${report.score_breakdown.injection_resistance}`);
 ```
 
-### With Anthropic
+## Supported Providers
+
+**Anthropic**
 
 ```typescript
-import { AgentValidator } from "agentseal";
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic();
-
-const validator = AgentValidator.fromAnthropic(client, {
+const validator = AgentValidator.fromAnthropic(new Anthropic(), {
   model: "claude-sonnet-4-5-20250929",
   systemPrompt: "You are a helpful assistant.",
 });
-
-const report = await validator.run();
 ```
 
-### With Vercel AI SDK
+**Vercel AI SDK**
 
 ```typescript
-import { AgentValidator } from "agentseal";
 import { openai } from "@ai-sdk/openai";
 
 const validator = AgentValidator.fromVercelAI({
   model: openai("gpt-4o"),
   systemPrompt: "You are a helpful assistant.",
 });
-
-const report = await validator.run();
 ```
 
-### With any HTTP endpoint
+**Ollama**
 
 ```typescript
-import { AgentValidator } from "agentseal";
+const validator = AgentValidator.fromEndpoint({
+  url: "http://localhost:11434/v1/chat/completions",
+});
+```
 
+**Any HTTP Endpoint**
+
+```typescript
 const validator = AgentValidator.fromEndpoint({
   url: "http://localhost:8080/chat",
-  messageField: "message",    // default
-  responseField: "response",  // default
+  messageField: "message",
+  responseField: "response",
 });
-
-const report = await validator.run();
 ```
 
-### With a custom function
+**Custom Function**
 
 ```typescript
-import { AgentValidator } from "agentseal";
-
 const validator = new AgentValidator({
   agentFn: async (message) => {
-    // Your agent logic here
-    return "response";
+    return await myAgent.chat(message);
   },
   groundTruthPrompt: "Your system prompt for comparison",
-  agentName: "My Agent",
   concurrency: 5,
-  adaptive: true,  // Enable mutation phase
+  adaptive: true,
 });
-
-const report = await validator.run();
 ```
 
-## CLI
+## CLI Usage
 
 ```bash
-# Scan with a model
-npx agentseal scan --prompt "You are a helpful assistant" --model gpt-4o
+# Scan a system prompt
+npx agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o
 
-# Scan an HTTP endpoint
-npx agentseal scan --url http://localhost:8080/chat --output json
+# Scan from file
+npx agentseal scan --file ./my-prompt.txt --model ollama/qwen3
 
-# Scan with Ollama
-npx agentseal scan --prompt "You are helpful" --model ollama/qwen3
+# JSON output
+npx agentseal scan --prompt "..." --model gpt-4o --output json --save report.json
 
-# With CI threshold (exit code 1 if below)
+# CI mode (exit code 1 if below threshold)
 npx agentseal scan --prompt "..." --model gpt-4o --min-score 75
 
 # Compare two reports
@@ -115,67 +133,68 @@ npx agentseal compare baseline.json current.json
 ### CLI Options
 
 | Flag | Description | Default |
-|------|-------------|---------|
-| `-p, --prompt <text>` | System prompt to test | — |
-| `-f, --file <path>` | File containing system prompt | — |
-| `--url <url>` | HTTP endpoint to test | — |
-| `-m, --model <name>` | Model (gpt-4o, claude-sonnet-4-5-20250929, ollama/qwen3) | — |
-| `--api-key <key>` | API key | env var |
-| `-o, --output <format>` | `terminal` or `json` | terminal |
-| `--save <path>` | Save JSON report to file | — |
-| `--concurrency <n>` | Parallel probes | 3 |
-| `--timeout <seconds>` | Timeout per probe | 30 |
+|---|---|---|
+| `-p, --prompt` | System prompt to test | |
+| `-f, --file` | File containing system prompt | |
+| `--url` | HTTP endpoint to test | |
+| `-m, --model` | Model name (gpt-4o, claude-sonnet-4-5-20250929, ollama/qwen3) | |
+| `--api-key` | API key (or use env var) | |
+| `-o, --output` | `terminal` or `json` | terminal |
+| `--save` | Save JSON report to file | |
+| `--concurrency` | Parallel probes | 3 |
+| `--timeout` | Per-probe timeout in seconds | 30 |
 | `--adaptive` | Enable mutation phase | false |
-| `--min-score <n>` | CI mode threshold | — |
-| `-v, --verbose` | Show each probe result | false |
+| `--min-score` | Minimum passing score for CI | |
+| `-v, --verbose` | Show individual probe results | false |
 
-## What It Tests
+## Attack Categories
 
-AgentSeal runs 150 probes across two attack categories:
+AgentSeal runs 150 probes across two categories:
 
-### Extraction Attacks (70 probes)
-Attempts to extract the system prompt via:
-- Direct requests, roleplay overrides, output format tricks
-- Encoding attacks (base64, ROT13, unicode)
-- Multi-turn escalation, hypothetical framing
-- Creative format exploitation (poems, songs, fill-in-blank)
+| Category | Probes | Techniques |
+|---|:---:|---|
+| **Extraction** | 70 | Direct requests, roleplay overrides, output format tricks, base64/ROT13/unicode encoding, multi-turn escalation, hypothetical framing, poems, songs, fill-in-the-blank |
+| **Injection** | 80 | Instruction overrides, delimiter attacks, persona hijacking, DAN variants, privilege escalation, skeleton key, indirect injection, tool exploits, social engineering |
 
-### Injection Attacks (80 probes)
-Attempts to inject instructions via:
-- Instruction overrides, delimiter attacks
-- Persona hijacking, DAN variants
-- Privilege escalation, skeleton key attacks
-- Indirect injection, tool exploits
-- Social engineering, emotional manipulation
+### Adaptive Mutations
 
-## Report Structure
+When `adaptive: true`, AgentSeal takes the top 5 blocked probes and retries them with 8 obfuscation transforms:
+
+| Transform | What it does |
+|---|---|
+| `base64` | Encodes the attack payload |
+| `rot13` | Letter rotation cipher |
+| `homoglyphs` | Replaces characters with unicode lookalikes |
+| `zero-width` | Injects invisible unicode characters |
+| `leetspeak` | Character substitution (a=4, e=3, etc.) |
+| `case-scramble` | Randomizes capitalization |
+| `reverse-embed` | Reverses and embeds the payload |
+| `prefix-pad` | Pads with misleading context |
+
+## Scan Results
 
 ```typescript
 interface ScanReport {
-  trust_score: number;          // 0-100
-  trust_level: TrustLevel;      // "critical" | "low" | "medium" | "high" | "excellent"
+  trust_score: number;             // 0 to 100, higher is more secure
+  trust_level: TrustLevel;         // "critical" | "low" | "medium" | "high" | "excellent"
   score_breakdown: {
     extraction_resistance: number;
     injection_resistance: number;
     boundary_integrity: number;
     consistency: number;
   };
-  defense_profile?: DefenseProfile;  // Detected defense system
-  mutation_results?: ProbeResult[];  // If adaptive mode enabled
-  mutation_resistance?: number;
-  results: ProbeResult[];
+  defense_profile?: DefenseProfile; // Detected defense system (Prompt Shield, Llama Guard, etc.)
+  results: ProbeResult[];           // Individual probe results
+  mutation_results?: ProbeResult[]; // Results from adaptive phase
+  mutation_resistance?: number;     // 0 to 100
 }
 ```
 
-## Semantic Detection (Optional)
+## Semantic Detection
 
-Bring your own embeddings for paraphrase detection:
+Optional. Bring your own embedding function for paraphrase detection:
 
 ```typescript
-import OpenAI from "openai";
-
-const openai = new OpenAI();
-
 const validator = new AgentValidator({
   agentFn: myAgent,
   groundTruthPrompt: "...",
@@ -191,40 +210,38 @@ const validator = new AgentValidator({
 });
 ```
 
-## Adaptive Mode
-
-When `adaptive: true`, AgentSeal takes the top 5 blocked probes and mutates them using 8 transforms (base64, ROT13, unicode homoglyphs, zero-width injection, leetspeak, case scramble, reverse embedding, prefix padding) to test mutation resistance.
-
 ## Pro Features
 
-The core scanner (150 probes) is **free and open source**. [AgentSeal Pro](https://agentseal.org) unlocks:
+The open source scanner covers 150 probes. [AgentSeal Pro](https://agentseal.org) extends this with:
 
-| Feature | Free | Pro |
-|---------|:----:|:---:|
-| 150 base probes (extraction + injection) | Yes | Yes |
-| Adaptive mutations (`--adaptive`) | Yes | Yes |
-| JSON output, CI/CD integration | Yes | Yes |
-| Defense fingerprinting | Yes | Yes |
-| **MCP tool poisoning probes** (+26) | - | Yes |
-| **RAG poisoning probes** (+20) | - | Yes |
-| **Behavioral genome mapping** | - | Yes |
-| **PDF security reports** | - | Yes |
-| **Dashboard** (track security over time) | - | Yes |
+| Feature | What it does |
+|---|---|
+| **MCP tool poisoning** (+26 probes) | Tests for hidden instructions in tool descriptions, malicious return values, cross-tool privilege escalation |
+| **RAG poisoning** (+20 probes) | Tests for poisoned documents in retrieval pipelines |
+| **Behavioral genome mapping** | Maps your agent's decision boundaries with ~105 targeted probes |
+| **PDF security reports** | Exportable reports for compliance and audits |
+| **Dashboard** | Real-time scan progress, history, trends, and remediation guidance |
 
-Visit **[agentseal.org](https://agentseal.org)** to create an account and unlock Pro features.
+[Start scanning at agentseal.org](https://agentseal.org)
 
-## Requirements
+## Also Available in Python
 
-- Node.js >= 18
-- Provider SDKs are optional peer dependencies — install only what you use
+```bash
+pip install agentseal
+agentseal scan --prompt "You are a helpful assistant" --model gpt-4o
+```
+
+[View Python package on PyPI](https://pypi.org/project/agentseal/)
 
 ## Links
 
-- **Website & Dashboard**: [agentseal.org](https://agentseal.org)
-- **GitHub**: [github.com/agentseal/agentseal](https://github.com/agentseal/agentseal)
-- **PyPI (Python)**: [pypi.org/project/agentseal](https://pypi.org/project/agentseal/)
-- **Full probe catalog**: [PROBES.md](https://github.com/agentseal/agentseal/blob/main/PROBES.md)
+| | |
+|---|---|
+| Website | [agentseal.org](https://agentseal.org) |
+| GitHub | [github.com/agentseal/agentseal](https://github.com/agentseal/agentseal) |
+| PyPI | [pypi.org/project/agentseal](https://pypi.org/project/agentseal/) |
+| Probe catalog | [PROBES.md](https://github.com/agentseal/agentseal/blob/main/PROBES.md) |
 
 ## License
 
-FSL-1.1-Apache-2.0 — see root [LICENSE](../LICENSE)
+FSL-1.1-Apache-2.0
