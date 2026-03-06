@@ -154,6 +154,10 @@ class ScanReport:
             d["mutation_resistance"] = round(self.mutation_resistance, 1) if self.mutation_resistance is not None else None
         if self.genome_report is not None:
             d["genome"] = self.genome_report
+        # Include structured remediation when serializing
+        remediation = self.get_structured_remediation()
+        if remediation.items and remediation.items[0].category:  # Skip "no issues" placeholder
+            d["remediation"] = remediation.to_dict()
         return d
 
     def to_json(self, indent: int = 2) -> str:
@@ -1022,6 +1026,24 @@ class ScanReport:
             sorted(findings.items(), key=lambda x: len(x[1]["leaked"]), reverse=True)
         )
         return findings
+
+    def get_structured_remediation(self):
+        """Generate structured remediation with priority-ranked items and combined fix block.
+
+        Returns a RemediationReport with:
+          - items: list of RemediationItem (priority, title, fix_text, affected_probes)
+          - combined_fix: ready-to-append security rules block
+          - analysis: summary of findings
+
+        Example::
+
+            remediation = report.get_structured_remediation()
+            for item in remediation.items:
+                print(f"[{item.priority}] {item.title}: {item.fix_text}")
+            print(remediation.combined_fix)
+        """
+        from .remediation import generate_remediation
+        return generate_remediation(self)
 
     def generate_hardened_prompt(self, original_prompt: str) -> str:
         """Generate a hardened version of the original prompt with security clauses appended."""

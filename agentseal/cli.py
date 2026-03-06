@@ -186,6 +186,9 @@ def main():
                              help="Generate a hardened prompt with security fixes applied. "
                                   "Optionally save to file: --fix hardened_prompt.txt")
 
+    scan_parser.add_argument("--json-remediation", action="store_true",
+                             help="Output structured remediation as JSON (for CI/CD pipelines)")
+
     # CI mode
     scan_parser.add_argument("--min-score", type=int, default=None,
                              help="Exit with code 1 if score is below this (for CI/CD)")
@@ -505,6 +508,11 @@ async def _run_scan(args):
         if args.output == "terminal":
             print(f"\n  \033[93m⚠ --fix requires a system prompt (--prompt or --file). "
                   f"Cannot generate hardened prompt for URL-only scans.\033[0m\n")
+
+    # ── Structured remediation JSON ──────────────────────────────────
+    if getattr(args, "json_remediation", False):
+        remediation = report.get_structured_remediation()
+        print(remediation.to_json())
 
     # ── PDF report (Pro feature) ─────────────────────────────────────
     if args.report:

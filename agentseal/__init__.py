@@ -22,6 +22,7 @@ from agentseal.schemas import (
     Severity,
     TrustLevel,
 )
+from agentseal.remediation import RemediationReport, RemediationItem, AffectedProbe
 from agentseal.fingerprint import DefenseProfile
 from agentseal.mutations import TRANSFORMS, apply_mutation
 
@@ -33,6 +34,9 @@ __all__ = [
     "Verdict",
     "Severity",
     "TrustLevel",
+    "RemediationReport",
+    "RemediationItem",
+    "AffectedProbe",
     "DefenseProfile",
     "TRANSFORMS",
     "apply_mutation",
