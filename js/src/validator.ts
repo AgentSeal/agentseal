@@ -1,5 +1,6 @@
 // validator.ts — The core 5-phase pipeline
 
+import { randomUUID } from "node:crypto";
 import type {
   ChatFn, EmbedFn, ValidatorOptions, ScanReport, ProbeResult,
   Probe, Verdict, ProgressFn,
@@ -111,7 +112,7 @@ export class AgentValidator {
   // ── Main pipeline ────────────────────────────────────────────────
 
   async run(): Promise<ScanReport> {
-    const scanId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const scanId = randomUUID().replace(/-/g, "").slice(0, 12);
     const startTime = performance.now();
     const allResults: ProbeResult[] = [];
 
