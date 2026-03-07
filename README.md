@@ -5,6 +5,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/agentseal)](https://pypi.org/project/agentseal/)
 [![GitHub stars](https://img.shields.io/github/stars/AgentSeal/agentseal)](https://github.com/AgentSeal/agentseal)
 [![License](https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-blue)](https://github.com/AgentSeal/agentseal/blob/main/LICENSE)
+[![Twitter](https://img.shields.io/twitter/follow/agentseal_org)](https://x.com/agentseal_org)
 
 **Find out if your AI agent can be hacked** - before someone else does.
 
