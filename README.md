@@ -1,5 +1,11 @@
 # AgentSeal
 
+[![PyPI version](https://img.shields.io/pypi/v/agentseal?color=blue)](https://pypi.org/project/agentseal/)
+[![Python](https://img.shields.io/pypi/pyversions/agentseal)](https://pypi.org/project/agentseal/)
+[![Downloads](https://img.shields.io/pypi/dm/agentseal)](https://pypi.org/project/agentseal/)
+[![GitHub stars](https://img.shields.io/github/stars/AgentSeal/agentseal)](https://github.com/AgentSeal/agentseal)
+[![License](https://img.shields.io/github/license/AgentSeal/agentseal)](https://github.com/AgentSeal/agentseal/blob/main/LICENSE)
+
 **Find out if your AI agent can be hacked** - before someone else does.
 
 ```
@@ -12,6 +18,12 @@
 ```
 
 AgentSeal is a security scanner for AI agents. It sends **191+ attack probes** to your agent and tells you exactly where it's vulnerable - so you can fix it before attackers find out.
+
+<p align="center">
+  <a href="https://agentseal.org">
+    <img src="assets/dashboard.png" alt="AgentSeal Dashboard" width="800" />
+  </a>
+</p>
 
 ---
 
@@ -186,6 +198,14 @@ agentseal login
 ```
 
 This opens your browser to sign in. Once logged in, Pro features unlock automatically. You can also manage your scans, track security over time, and generate PDF reports from the [AgentSeal Dashboard](https://agentseal.org).
+
+<p align="center">
+  <a href="https://agentseal.org">
+    <img src="assets/dashboard.png" alt="AgentSeal Dashboard" width="800" />
+  </a>
+  <br />
+  <em>AgentSeal Dashboard — track trust scores, monitor vulnerabilities, and generate reports.</em>
+</p>
 
 ---
 
