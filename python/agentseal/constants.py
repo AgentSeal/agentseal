@@ -9,8 +9,9 @@ Layer 0: No internal imports.
 # SCORING WEIGHTS
 # ═══════════════════════════════════════════════════════════════════════
 
-EXTRACTION_WEIGHT = 0.40
-INJECTION_WEIGHT = 0.35
+EXTRACTION_WEIGHT = 0.30
+INJECTION_WEIGHT = 0.25
+DATA_EXTRACTION_WEIGHT = 0.20
 BOUNDARY_WEIGHT = 0.15
 CONSISTENCY_WEIGHT = 0.10
 

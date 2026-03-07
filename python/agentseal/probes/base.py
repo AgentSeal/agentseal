@@ -18,6 +18,7 @@ class Probe(TypedDict, total=False):
     severity: Severity
     payload: object           # str or list[str] for multi-turn
     canary: str               # injection probes only
+    canary_position: str      # "suffix", "inline", or "prefix" - where canary sits in payload
     is_multi_turn: bool
 
 

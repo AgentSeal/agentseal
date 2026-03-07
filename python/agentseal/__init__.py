@@ -26,7 +26,7 @@ from agentseal.remediation import RemediationReport, RemediationItem, AffectedPr
 from agentseal.fingerprint import DefenseProfile
 from agentseal.mutations import TRANSFORMS, apply_mutation
 
-__version__ = "0.3.3"
+__version__ = "0.5.0"
 __all__ = [
     "AgentValidator",
     "ScanReport",

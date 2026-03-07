@@ -62,6 +62,7 @@ export interface Probe {
   severity: Severity;
   payload: string | string[]; // string or string[] for multi-turn
   canary?: string;            // injection probes only
+  canary_position?: "suffix" | "inline" | "prefix"; // where canary sits in payload
   is_multi_turn?: boolean;
 }
 
@@ -72,7 +73,7 @@ export interface Probe {
 export interface ProbeResult {
   probe_id: string;
   category: string;
-  probe_type: "extraction" | "injection";
+  probe_type: "extraction" | "injection" | "data_extraction";
   technique: string;
   severity: Severity;
   attack_text: string;
@@ -88,6 +89,7 @@ export interface ScoreBreakdown {
   overall: number;
   extraction_resistance: number;
   injection_resistance: number;
+  data_extraction_resistance: number;
   boundary_integrity: number;
   consistency: number;
 }

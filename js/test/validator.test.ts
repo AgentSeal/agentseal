@@ -20,12 +20,12 @@ describe("AgentValidator", () => {
     expect(report.agent_name).toBe("Refuse Agent");
     expect(report.trust_score).toBeGreaterThanOrEqual(85);
     expect(report.trust_level).toBe(TrustLevel.EXCELLENT);
-    expect(report.total_probes).toBe(173);
+    expect(report.total_probes).toBe(191);
     expect(report.probes_blocked).toBeGreaterThan(100);
     expect(report.ground_truth_provided).toBe(true);
     expect(report.scan_id).toBeTruthy();
     expect(report.timestamp).toBeTruthy();
-    expect(report.results).toHaveLength(173);
+    expect(report.results).toHaveLength(191);
   }, 30000);
 
   it("leak-all agent scores < 20", async () => {
@@ -41,7 +41,7 @@ describe("AgentValidator", () => {
 
     // Extraction probes leak, but injection probes don't (no canary in response)
     // So score reflects ~50% leaked (extraction) and ~50% blocked (injection)
-    expect(report.trust_score).toBeLessThan(55);
+    expect(report.trust_score).toBeLessThan(65);
     expect(report.probes_leaked).toBeGreaterThan(40);
   }, 30000);
 
@@ -56,7 +56,7 @@ describe("AgentValidator", () => {
 
     const report = await validator.run();
 
-    expect(report.probes_error).toBe(173);
+    expect(report.probes_error).toBe(191);
     expect(report.trust_score).toBeGreaterThan(0);
   }, 30000);
 
@@ -71,7 +71,7 @@ describe("AgentValidator", () => {
     const report = await validator.run();
 
     expect(report.ground_truth_provided).toBe(false);
-    expect(report.total_probes).toBe(173);
+    expect(report.total_probes).toBe(191);
   }, 30000);
 
   it("tracks progress callbacks", async () => {

@@ -175,9 +175,9 @@ describe("verdictScore edge cases", () => {
 });
 
 describe("computeScores edge cases", () => {
-  it("empty results returns all-50 defaults", () => {
+  it("empty results returns defaults (data_extraction defaults to 100)", () => {
     const scores = computeScores([]);
-    expect(scores.overall).toBe(50);
+    expect(scores.overall).toBe(60); // 50*0.30 + 50*0.25 + 100*0.20 + 50*0.15 + 50*0.10
     expect(scores.extraction_resistance).toBe(50);
     expect(scores.injection_resistance).toBe(50);
     expect(scores.boundary_integrity).toBe(50);
@@ -505,12 +505,12 @@ describe("probe count verification", () => {
     expect(buildExtractionProbes()).toHaveLength(82);
   });
 
-  it("injection probes = exactly 91", () => {
-    expect(buildInjectionProbes()).toHaveLength(91);
+  it("injection probes = exactly 109", () => {
+    expect(buildInjectionProbes()).toHaveLength(109);
   });
 
-  it("total probes = 173", () => {
-    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(173);
+  it("total probes = 191", () => {
+    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(191);
   });
 
   it("all extraction probe IDs start with ext_", () => {
@@ -528,8 +528,8 @@ describe("probe count verification", () => {
   it("canary strings are unique across all injection probes", () => {
     const probes = buildInjectionProbes();
     const canaries = probes.map((p) => p.canary).filter(Boolean) as string[];
-    expect(canaries.length).toBe(91);
-    expect(new Set(canaries).size).toBe(91);
+    expect(canaries.length).toBe(109);
+    expect(new Set(canaries).size).toBe(109);
   });
 
   it("multi-turn probes have array payloads", () => {
@@ -1194,7 +1194,7 @@ describe("AgentValidator edge cases", () => {
 
     const report = await validator.run();
     // All probes should error due to timeout
-    expect(report.probes_error).toBe(173);
+    expect(report.probes_error).toBe(191);
   }, 60000);
 
   it("agent that throws produces ERROR verdict", async () => {
@@ -1205,7 +1205,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.probes_error).toBe(173);
+    expect(report.probes_error).toBe(191);
     expect(report.trust_score).toBeGreaterThan(0);
   }, 30000);
 
@@ -1226,7 +1226,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.total_probes).toBe(173);
+    expect(report.total_probes).toBe(191);
     expect(maxConcurrent).toBe(1);
   }, 60000);
 
@@ -1275,7 +1275,7 @@ describe("AgentValidator edge cases", () => {
     expect(phases.has("extraction")).toBe(true);
     expect(phases.has("injection")).toBe(true);
     expect(phases.get("extraction")).toBe(82);
-    expect(phases.get("injection")).toBe(91);
+    expect(phases.get("injection")).toBe(109);
   }, 30000);
 });
 
@@ -1367,7 +1367,7 @@ describe("semaphore behavior", () => {
     });
     const report = await validator.run();
     // If release wasn't called properly, this would hang
-    expect(report.total_probes).toBe(173);
+    expect(report.total_probes).toBe(191);
   }, 30000);
 });
 

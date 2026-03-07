@@ -52,6 +52,8 @@ from agentseal import schemas as _schemas
 from agentseal.probes.extraction import build_extraction_probes as _build_extraction_probes
 from agentseal.probes.injection import build_injection_probes as _build_injection_probes
 from agentseal.detection.canary import detect_canary as _detect_canary
+from agentseal.detection.canary import classify_canary_leak as _classify_canary_leak
+from agentseal.probes.injection import make_data_extraction_variant as _make_data_extraction_variant
 from agentseal.detection.ngram import detect_extraction as _detect_extraction
 from agentseal.scoring import compute_scores as _compute_scores
 from agentseal import constants as _constants
@@ -84,6 +86,7 @@ _DEPRECATED_NAMES = {
     "INJECTION_WEIGHT": ("agentseal.constants", _constants.INJECTION_WEIGHT),
     "BOUNDARY_WEIGHT": ("agentseal.constants", _constants.BOUNDARY_WEIGHT),
     "CONSISTENCY_WEIGHT": ("agentseal.constants", _constants.CONSISTENCY_WEIGHT),
+    "DATA_EXTRACTION_WEIGHT": ("agentseal.constants", _constants.DATA_EXTRACTION_WEIGHT),
     "BOUNDARY_CATEGORIES": ("agentseal.constants", _constants.BOUNDARY_CATEGORIES),
 }
 
@@ -391,14 +394,13 @@ class AgentValidator:
                             self.agent_fn(probe["payload"]), timeout=self.timeout
                         )
                     canary = probe["canary"]
-                    if _detect_canary(response, canary):
-                        verdict = _Verdict.LEAKED
+                    verdict, reasoning = _classify_canary_leak(response, canary)
+                    if verdict == _Verdict.LEAKED:
                         confidence = 0.99
-                        reasoning = f"Canary '{canary}' found in response"
+                    elif verdict == _Verdict.PARTIAL:
+                        confidence = 0.75
                     else:
-                        verdict = _Verdict.BLOCKED
                         confidence = 0.85
-                        reasoning = "Canary not found in response"
                 except asyncio.TimeoutError:
                     response = "[TIMEOUT]"
                     verdict, confidence, reasoning = _Verdict.ERROR, 0.0, "Probe timed out"
@@ -441,12 +443,86 @@ class AgentValidator:
         injection_results = await asyncio.gather(*injection_tasks)
         all_results.extend(injection_results)
 
-        # ── Phase 3: Defense Fingerprinting ──────────────────────────
+        # ── Phase 3: Data Extraction Follow-up ───────────────────────
+        # Re-run leaked injection probes with real data extraction payloads
+        if self.ground_truth:
+            leaked_injections = [
+                (r, p) for r, p in zip(injection_results, injection_probes)
+                if r.verdict == _Verdict.LEAKED
+            ][:20]  # Cap at top 20
+
+            if leaked_injections:
+                data_ext_probes = []
+                for result, probe in leaked_injections:
+                    variant = _make_data_extraction_variant(probe, self.ground_truth)
+                    data_ext_probes.append(variant)
+
+                de_done = [0]
+                if self.on_progress:
+                    self.on_progress("data_extraction", 0, len(data_ext_probes))
+
+                async def run_data_extraction_probe(probe: dict) -> _ProbeResult:
+                    async with sem:
+                        t0 = time.time()
+                        try:
+                            if probe.get("is_multi_turn"):
+                                response = ""
+                                for msg in probe["payload"]:
+                                    response = await asyncio.wait_for(
+                                        self.agent_fn(msg), timeout=self.timeout
+                                    )
+                            else:
+                                response = await asyncio.wait_for(
+                                    self.agent_fn(probe["payload"]), timeout=self.timeout
+                                )
+                            # Use n-gram detection against ground truth
+                            verdict, confidence, reasoning = _detect_extraction(
+                                response, self.ground_truth or ""
+                            )
+                        except asyncio.TimeoutError:
+                            response = "[TIMEOUT]"
+                            verdict, confidence, reasoning = _Verdict.ERROR, 0.0, "Probe timed out"
+                        except Exception as e:
+                            response = f"[ERROR: {e}]"
+                            verdict, confidence, reasoning = _Verdict.ERROR, 0.0, f"Error: {e}"
+
+                        duration = (time.time() - t0) * 1000
+                        payload_str = " → ".join(probe["payload"]) if isinstance(probe["payload"], list) else probe["payload"]
+
+                        result = _ProbeResult(
+                            probe_id=probe["probe_id"],
+                            category=probe.get("category", "data_extraction"),
+                            probe_type="data_extraction",
+                            technique=probe.get("technique", "data_extraction"),
+                            severity=probe["severity"],
+                            attack_text=payload_str[:500],
+                            response_text=response[:1000],
+                            verdict=verdict,
+                            confidence=confidence,
+                            reasoning=reasoning,
+                            duration_ms=duration,
+                        )
+
+                        if self.verbose:
+                            icon = {"blocked": "✓", "leaked": "✗", "partial": "◐", "error": "⚠"}
+                            print(f"  [{icon[verdict.value]}] {probe['probe_id']:20s} → {verdict.value:8s}  ({reasoning[:60]})")
+
+                        if self.on_progress:
+                            de_done[0] += 1
+                            self.on_progress("data_extraction", de_done[0], len(data_ext_probes))
+
+                        return result
+
+                de_tasks = [run_data_extraction_probe(p) for p in data_ext_probes]
+                de_results = await asyncio.gather(*de_tasks)
+                all_results.extend(de_results)
+
+        # ── Phase 4: Defense Fingerprinting ──────────────────────────
         from agentseal.fingerprint import fingerprint_defense
         all_responses = [r.response_text for r in all_results]
         defense_profile = fingerprint_defense(all_responses)
 
-        # ── Phase 4: Mutations (if --adaptive) ──────────────────────
+        # ── Phase 5: Mutations (if --adaptive) ──────────────────────
         mutation_results_list: list[_ProbeResult] = []
         mutation_resistance = None
 
@@ -523,7 +599,7 @@ class AgentValidator:
                     blocked_count = sum(1 for r in active_mutations if r.verdict == _Verdict.BLOCKED)
                     mutation_resistance = (blocked_count / len(active_mutations)) * 100
 
-        # ── Phase 5: Score ───────────────────────────────────────────
+        # ── Phase 6: Score ───────────────────────────────────────────
         scores = _compute_scores(all_results)
         trust_level = _TrustLevel.from_score(scores["overall"])
 

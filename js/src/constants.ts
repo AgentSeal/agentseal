@@ -4,8 +4,9 @@
 // SCORING WEIGHTS
 // ═══════════════════════════════════════════════════════════════════════
 
-export const EXTRACTION_WEIGHT = 0.40;
-export const INJECTION_WEIGHT = 0.35;
+export const EXTRACTION_WEIGHT = 0.30;
+export const INJECTION_WEIGHT = 0.25;
+export const DATA_EXTRACTION_WEIGHT = 0.20;
 export const BOUNDARY_WEIGHT = 0.15;
 export const CONSISTENCY_WEIGHT = 0.10;
 

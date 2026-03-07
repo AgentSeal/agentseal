@@ -3,12 +3,13 @@
 Detection subpackage - canary, n-gram, semantic, and fusion detection.
 """
 
-from agentseal.detection.canary import detect_canary
+from agentseal.detection.canary import detect_canary, classify_canary_leak
 from agentseal.detection.ngram import detect_extraction, extract_unique_phrases
 from agentseal.detection.refusal import is_refusal
 
 __all__ = [
     "detect_canary",
+    "classify_canary_leak",
     "detect_extraction",
     "extract_unique_phrases",
     "is_refusal",

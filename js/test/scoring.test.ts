@@ -69,7 +69,7 @@ describe("computeScores", () => {
     const scores = computeScores(results);
     expect(scores.extraction_resistance).toBe(0);
     expect(scores.injection_resistance).toBe(0);
-    expect(scores.overall).toBeLessThan(20);
+    expect(scores.overall).toBeLessThan(40);
   });
 
   it("empty results → default 50 scores", () => {

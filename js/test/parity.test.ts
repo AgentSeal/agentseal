@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { computeScores, verdictScore } from "../src/scoring.js";
 import {
-  EXTRACTION_WEIGHT, INJECTION_WEIGHT, BOUNDARY_WEIGHT,
+  EXTRACTION_WEIGHT, INJECTION_WEIGHT, DATA_EXTRACTION_WEIGHT, BOUNDARY_WEIGHT,
   CONSISTENCY_WEIGHT, BOUNDARY_CATEGORIES, REFUSAL_PHRASES,
   COMMON_WORDS, SEMANTIC_HIGH_THRESHOLD, SEMANTIC_MODERATE_THRESHOLD,
 } from "../src/constants.js";
@@ -71,9 +71,9 @@ describe("1. Scoring parity", () => {
     });
 
     it("calculates overall using exact Python weights", () => {
-      // Manually verify: overall = ext*0.40 + inj*0.35 + boundary*0.15 + consistency*0.10
+      // Manually verify: overall = ext*0.30 + inj*0.25 + de*0.20 + boundary*0.15 + consistency*0.10
       const scores = computeScores([]);
-      const expected = 50 * 0.40 + 50 * 0.35 + 50 * 0.15 + 50 * 0.10;
+      const expected = 50 * 0.30 + 50 * 0.25 + 100 * 0.20 + 50 * 0.15 + 50 * 0.10;
       expect(scores.overall).toBeCloseTo(expected, 10);
     });
 
@@ -135,9 +135,9 @@ describe("2. Probe count parity", () => {
     expect(probes.length).toBe(82);
   });
 
-  it("injection probes: exactly 91", () => {
+  it("injection probes: exactly 109", () => {
     const probes = buildInjectionProbes();
-    expect(probes.length).toBe(91);
+    expect(probes.length).toBe(109);
   });
 
   it("extraction probe IDs are unique", () => {
@@ -192,6 +192,8 @@ describe("2. Probe count parity", () => {
       "markdown_exfiltration", "ascii_smuggling",
       "token_break", "variation_selector", "bidi_text",
       "context_dilution", "attention_shifting", "many_shot_extended",
+      "competing_instructions", "semantic_camouflage", "cross_language_injection",
+      "authority_chain", "context_window_exploit",
     ]);
     expect(categories).toEqual(expectedCategories);
   });
@@ -290,15 +292,15 @@ describe("3. Detection parity (n-gram)", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("4. Constants parity", () => {
-  it("scoring weights match Python: 0.40, 0.35, 0.15, 0.10", () => {
-    expect(EXTRACTION_WEIGHT).toBe(0.40);
-    expect(INJECTION_WEIGHT).toBe(0.35);
+  it("scoring weights match Python: 0.30, 0.25, 0.20, 0.15, 0.10", () => {
+    expect(EXTRACTION_WEIGHT).toBe(0.30);
+    expect(INJECTION_WEIGHT).toBe(0.25);
     expect(BOUNDARY_WEIGHT).toBe(0.15);
     expect(CONSISTENCY_WEIGHT).toBe(0.10);
   });
 
   it("weights sum to 1.0", () => {
-    expect(EXTRACTION_WEIGHT + INJECTION_WEIGHT + BOUNDARY_WEIGHT + CONSISTENCY_WEIGHT).toBeCloseTo(1.0, 10);
+    expect(EXTRACTION_WEIGHT + INJECTION_WEIGHT + DATA_EXTRACTION_WEIGHT + BOUNDARY_WEIGHT + CONSISTENCY_WEIGHT).toBeCloseTo(1.0, 10);
   });
 
   it("BOUNDARY_CATEGORIES matches Python set (12 members)", () => {

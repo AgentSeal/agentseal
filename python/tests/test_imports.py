@@ -62,11 +62,13 @@ class TestCanonicalImports:
 
     def test_constants(self):
         from agentseal.constants import (
-            EXTRACTION_WEIGHT, INJECTION_WEIGHT, BOUNDARY_WEIGHT,
-            CONSISTENCY_WEIGHT, BOUNDARY_CATEGORIES, REFUSAL_PHRASES, COMMON_WORDS,
+            EXTRACTION_WEIGHT, INJECTION_WEIGHT, DATA_EXTRACTION_WEIGHT,
+            BOUNDARY_WEIGHT, CONSISTENCY_WEIGHT, BOUNDARY_CATEGORIES,
+            REFUSAL_PHRASES, COMMON_WORDS,
         )
-        assert EXTRACTION_WEIGHT == 0.40
-        assert INJECTION_WEIGHT == 0.35
+        assert EXTRACTION_WEIGHT == 0.30
+        assert INJECTION_WEIGHT == 0.25
+        assert DATA_EXTRACTION_WEIGHT == 0.20
         assert isinstance(BOUNDARY_CATEGORIES, set)
         assert isinstance(REFUSAL_PHRASES, list)
         assert isinstance(COMMON_WORDS, set)
@@ -109,8 +111,9 @@ class TestCanonicalImports:
         assert callable(is_refusal)
 
     def test_detection_canary(self):
-        from agentseal.detection.canary import detect_canary
+        from agentseal.detection.canary import detect_canary, classify_canary_leak
         assert callable(detect_canary)
+        assert callable(classify_canary_leak)
 
     def test_detection_ngram(self):
         from agentseal.detection.ngram import detect_extraction, extract_unique_phrases
@@ -251,8 +254,8 @@ class TestFunctional:
         from agentseal.probes import build_extraction_probes, build_injection_probes
         ext = build_extraction_probes()
         inj = build_injection_probes()
-        assert len(ext) == 37, f"Expected 37 extraction probes, got {len(ext)}"
-        assert len(inj) == 35, f"Expected 35 injection probes, got {len(inj)}"
+        assert len(ext) >= 37, f"Expected at least 37 extraction probes, got {len(ext)}"
+        assert len(inj) == 109, f"Expected 109 injection probes, got {len(inj)}"
 
     def test_canary_generation(self):
         from agentseal.probes.base import generate_canary

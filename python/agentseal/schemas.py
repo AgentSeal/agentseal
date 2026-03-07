@@ -1104,10 +1104,12 @@ def _print_report(report: ScanReport):
 
     # Score breakdown
     bd = report.score_breakdown
-    print(f"  {DIM}Extraction Resistance:  {_bar(bd['extraction_resistance'])}{RESET}")
-    print(f"  {DIM}Injection Resistance:   {_bar(bd['injection_resistance'])}{RESET}")
-    print(f"  {DIM}Boundary Integrity:     {_bar(bd['boundary_integrity'])}{RESET}")
-    print(f"  {DIM}Consistency:            {_bar(bd['consistency'])}{RESET}")
+    print(f"  {DIM}Extraction Resistance:      {_bar(bd['extraction_resistance'])}{RESET}")
+    print(f"  {DIM}Injection Resistance:       {_bar(bd['injection_resistance'])}{RESET}")
+    if "data_extraction_resistance" in bd:
+        print(f"  {DIM}Data Extraction Resistance: {_bar(bd['data_extraction_resistance'])}{RESET}")
+    print(f"  {DIM}Boundary Integrity:         {_bar(bd['boundary_integrity'])}{RESET}")
+    print(f"  {DIM}Consistency:                {_bar(bd['consistency'])}{RESET}")
     print()
 
     # Summary
