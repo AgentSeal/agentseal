@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://agentseal.org">
-    <img src="https://agentseal.org/agentseal-icon.png" height="80" alt="AgentSeal" />
+    <img src="https://agentseal.org/icon-512.png" height="80" alt="AgentSeal" />
   </a>
 </p>
 
@@ -10,8 +10,8 @@
   <a href="https://pypi.org/project/agentseal/"><img src="https://img.shields.io/pypi/v/agentseal?color=blue" alt="PyPI" /></a>
   <a href="https://www.npmjs.com/package/agentseal"><img src="https://img.shields.io/npm/v/agentseal?color=blue" alt="npm" /></a>
   <a href="https://pypi.org/project/agentseal/"><img src="https://img.shields.io/pypi/dm/agentseal" alt="Downloads" /></a>
-  <a href="https://github.com/AgentSeal/agentseal"><img src="https://img.shields.io/github/stars/AgentSeal/agentseal" alt="Stars" /></a>
-  <a href="https://github.com/AgentSeal/agentseal/blob/main/LICENSE"><img src="https://img.shields.io/github/license/AgentSeal/agentseal" alt="License" /></a>
+  <a href="https://github.com/AgentSeal/agentseal/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--Apache--2.0-blue" alt="License" /></a>
+  <a href="https://x.com/agentseal_org"><img src="https://img.shields.io/twitter/follow/agentseal_org" alt="Follow on X" /></a>
 </p>
 
 <p align="center">
