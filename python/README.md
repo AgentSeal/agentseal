@@ -1,92 +1,167 @@
-# AgentSeal
+<p align="center">
+  <a href="https://agentseal.org">
+    <img src="https://agentseal.org/agentseal-icon.png" height="80" alt="AgentSeal" />
+  </a>
+</p>
 
-[![PyPI version](https://img.shields.io/pypi/v/agentseal?color=blue)](https://pypi.org/project/agentseal/)
-[![Python](https://img.shields.io/pypi/pyversions/agentseal)](https://pypi.org/project/agentseal/)
-[![Downloads](https://img.shields.io/pypi/dm/agentseal)](https://pypi.org/project/agentseal/)
-[![GitHub stars](https://img.shields.io/github/stars/AgentSeal/agentseal)](https://github.com/AgentSeal/agentseal)
-[![License](https://img.shields.io/github/license/AgentSeal/agentseal)](https://github.com/AgentSeal/agentseal/blob/main/LICENSE)
+<h3 align="center">Security scanner for AI agents</h3>
 
-**Find out if your AI agent can be hacked** - before someone else does.
+<p align="center">
+  <a href="https://pypi.org/project/agentseal/"><img src="https://img.shields.io/pypi/v/agentseal?color=blue" alt="PyPI" /></a>
+  <a href="https://www.npmjs.com/package/agentseal"><img src="https://img.shields.io/npm/v/agentseal?color=blue" alt="npm" /></a>
+  <a href="https://pypi.org/project/agentseal/"><img src="https://img.shields.io/pypi/dm/agentseal" alt="Downloads" /></a>
+  <a href="https://github.com/AgentSeal/agentseal"><img src="https://img.shields.io/github/stars/AgentSeal/agentseal" alt="Stars" /></a>
+  <a href="https://github.com/AgentSeal/agentseal/blob/main/LICENSE"><img src="https://img.shields.io/github/license/AgentSeal/agentseal" alt="License" /></a>
+</p>
 
-AgentSeal is a security toolkit for AI agents. It scans your machine for dangerous skills and MCP configs, monitors for supply chain attacks, tests your agent's resistance to prompt injection, and audits live MCP servers for tool poisoning.
+<p align="center">
+  <a href="https://agentseal.org/docs">Docs</a> &middot;
+  <a href="https://agentseal.org/mcp">MCP Registry</a> &middot;
+  <a href="https://agentseal.org/dashboard">Dashboard</a> &middot;
+  <a href="https://agentseal.org/blog">Blog</a>
+</p>
+
+---
 
 ```bash
 pip install agentseal
-agentseal guard        # scan your machine right now - no API key, no config
+agentseal guard
 ```
 
-## What It Does
+Scans your machine for dangerous skill files, MCP server configs, and toxic data flows across 17+ AI agents. No API key required.
 
-| Command | What it does | API key? |
-|---------|-------------|:--------:|
-| `agentseal guard` | Scans your machine for dangerous skills, MCP configs, toxic data flows, and supply chain changes | No |
-| `agentseal shield` | Watches your config files in real time and alerts on threats | No |
-| `agentseal scan` | Tests your agent's system prompt against 191+ attack probes | Yes* |
-| `agentseal scan-mcp` | Connects to live MCP servers and audits tool descriptions for poisoning | No |
+---
 
-*Free with [Ollama](https://ollama.com) (local model). Cloud models require an API key.
+## Architecture
 
-## Guard - Machine Security Scan
+```mermaid
+graph TD
+    U["User"] -->|prompt| A["AI Agent (LLM)"]
+    A -->|tool call| M1["MCP Server\n(filesystem)"]
+    A -->|tool call| M2["MCP Server\n(slack)"]
+    A -->|tool call| M3["MCP Server\n(database)"]
+
+    M1 -->|reads| FS["~/.ssh/\n~/.aws/\n~/Documents/"]
+    M2 -->|reads| SL["Messages\nChannels"]
+    M3 -->|queries| DB["Tables\nCredentials"]
+
+    SL -.->|"toxic flow"| M1
+    M1 -.->|"exfiltration"| EX["Attacker"]
+
+    style U fill:#1a1a2e,stroke:#58a6ff,color:#e6edf3
+    style A fill:#1a1a2e,stroke:#58a6ff,color:#e6edf3
+    style M1 fill:#3b1d0e,stroke:#f59e0b,color:#e6edf3
+    style M2 fill:#3b1d0e,stroke:#f59e0b,color:#e6edf3
+    style M3 fill:#3b1d0e,stroke:#f59e0b,color:#e6edf3
+    style EX fill:#3b0e0e,stroke:#ef4444,color:#e6edf3
+    style FS fill:#1a1a2e,stroke:#30363d,color:#8b949e
+    style SL fill:#1a1a2e,stroke:#30363d,color:#8b949e
+    style DB fill:#1a1a2e,stroke:#30363d,color:#8b949e
+```
+
+MCP servers give AI agents access to local files, databases, APIs, and credentials. Tool descriptions can contain hidden instructions that the agent follows but the user never sees. AgentSeal detects these threats across four attack surfaces.
+
+## Commands
+
+| Command | Description | API key |
+|---|---|:---:|
+| `agentseal guard` | Scan skill files, MCP configs, toxic data flows, and supply chain changes | No |
+| `agentseal shield` | Real-time file monitoring with desktop alerts and auto-quarantine | No |
+| `agentseal scan` | Test system prompts against 191+ adversarial probes | Yes* |
+| `agentseal scan-mcp` | Audit live MCP server tool descriptions for poisoning | No |
+
+\*Free with [Ollama](https://ollama.com). Cloud providers require an API key.
+
+## Guard
+
+Scans all AI agent configurations on your machine. Supports Claude Code, Cursor, Windsurf, VS Code, Gemini CLI, Codex, Cline, Copilot, and others.
 
 ```bash
 agentseal guard
 ```
 
-Auto-discovers 17 AI agents (Claude Code, Cursor, Windsurf, VS Code, Gemini CLI, Codex, and more), scans every skill and MCP config for threats, detects toxic data flows across servers, and tracks baselines to catch supply chain attacks.
-
 ```
-  SKILLS
-  [XX] sketchy-rules         MALWARE - Credential access
-       -> Remove this skill immediately and rotate all credentials.
-  [OK] 4 more safe skills
+SKILLS
+[XX] sketchy-rules         MALWARE  Credential access
+     Remove this skill immediately and rotate all credentials.
+[OK] 4 more safe skills
 
-  MCP SERVERS
-  [XX] filesystem            DANGER - Access to SSH private keys
-       -> Restrict 'filesystem' MCP server: remove .ssh from allowed paths.
+MCP SERVERS
+[XX] filesystem            DANGER   Access to SSH private keys
+     Restrict filesystem MCP server: remove .ssh from allowed paths.
 
-  TOXIC FLOW RISKS
-  [HIGH] Data exfiltration path detected
-       Servers: filesystem, slack
+TOXIC FLOWS
+[HIGH] Data exfiltration path: filesystem + slack
 ```
 
-## Shield - Continuous Monitoring
+### Detection pipeline
+
+```mermaid
+graph LR
+    IN["Skill Files\nMCP Configs"] --> P["Pattern\nSignatures"]
+    P --> D["Deobfuscation\n(Unicode Tags,\nBase64, BiDi, ZWC)"]
+    D --> S["Semantic\nAnalysis\n(MiniLM-L6-v2)"]
+    S --> B["Baseline\nTracking\n(SHA-256)"]
+    B --> OUT["Report +\nSeverity"]
+
+    style IN fill:#1a1a2e,stroke:#58a6ff,color:#e6edf3
+    style P fill:#161b22,stroke:#30363d,color:#e6edf3
+    style D fill:#161b22,stroke:#30363d,color:#e6edf3
+    style S fill:#161b22,stroke:#30363d,color:#e6edf3
+    style B fill:#161b22,stroke:#30363d,color:#e6edf3
+    style OUT fill:#0d4429,stroke:#22c55e,color:#e6edf3
+```
+
+## Scan
+
+191 attack probes: 82 extraction techniques, 109 injection techniques, 8 adaptive mutation transforms. Deterministic n-gram and canary token scoring. No LLM judge.
+
+<details>
+<summary><strong>OpenAI</strong></summary>
+
+```bash
+agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o
+```
+</details>
+
+<details>
+<summary><strong>Ollama (free, local)</strong></summary>
+
+```bash
+agentseal scan --prompt "You are a helpful assistant..." --model ollama/llama3.1:8b
+```
+</details>
+
+<details>
+<summary><strong>HTTP endpoint</strong></summary>
+
+```bash
+agentseal scan --url http://localhost:8080/chat
+```
+</details>
+
+## Scan-MCP
+
+Connects to live MCP servers over stdio or SSE. Enumerates tools, analyzes descriptions through pattern matching, deobfuscation, semantic similarity, and optional LLM classification. Outputs a trust score per server.
+
+```bash
+agentseal scan-mcp --server npx @modelcontextprotocol/server-filesystem /tmp
+```
+
+## Shield
+
+Watches agent config paths in real time. Desktop notifications on threats. Quarantines files with detected payloads.
 
 ```bash
 pip install agentseal[shield]
 agentseal shield
 ```
 
-Watches all agent config paths in real time. Desktop notifications on threats. Baseline checks on every MCP config change.
-
-## Scan - Prompt Security Testing
-
-```bash
-# Cloud model
-agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o
-
-# Free local model (no API key)
-agentseal scan --prompt "You are a helpful assistant..." --model ollama/llama3.1:8b
-
-# Live endpoint
-agentseal scan --url http://localhost:8080/chat
-```
-
-191 attack probes (82 extraction + 109 injection). Deterministic scoring - no AI judge, same result every time.
-
-## Scan-MCP - Live MCP Server Audit
-
-```bash
-agentseal scan-mcp --server npx @modelcontextprotocol/server-filesystem /tmp
-```
-
-4-layer analysis of tool descriptions: pattern detection, deobfuscation, semantic embeddings, LLM judge. Catches poisoning, hidden instructions, and cross-server collusion.
-
 ## Python API
 
 ```python
 from agentseal import AgentValidator
 
-# OpenAI
 validator = AgentValidator.from_openai(
     client=openai.AsyncOpenAI(),
     model="gpt-4o",
@@ -94,9 +169,16 @@ validator = AgentValidator.from_openai(
 )
 report = await validator.run()
 print(f"Trust score: {report.trust_score}/100")
+```
 
+<details>
+<summary><strong>Anthropic / HTTP / Custom</strong></summary>
+
+```python
 # Anthropic
-validator = AgentValidator.from_anthropic(client, model="claude-sonnet-4-5-20250929", system_prompt="...")
+validator = AgentValidator.from_anthropic(
+    client=client, model="claude-sonnet-4-5-20250929", system_prompt="..."
+)
 
 # HTTP endpoint
 validator = AgentValidator.from_endpoint(url="http://localhost:8080/chat")
@@ -104,35 +186,40 @@ validator = AgentValidator.from_endpoint(url="http://localhost:8080/chat")
 # Custom function
 validator = AgentValidator(agent_fn=my_agent, ground_truth_prompt="...")
 ```
+</details>
 
 ## CI/CD
 
 ```bash
 agentseal scan --file ./prompt.txt --model gpt-4o --min-score 75
-# Exit code 1 if below threshold. SARIF output with --output sarif.
 ```
 
-## Supported Models
+Exit code 1 if trust score is below threshold. SARIF output supported via `--output sarif`.
 
-| Provider | Usage | API key? |
-|----------|-------|:--------:|
-| **OpenAI** | `--model gpt-4o` | `OPENAI_API_KEY` |
-| **Anthropic** | `--model claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
-| **Ollama** (free) | `--model ollama/llama3.1:8b` | No |
-| **LiteLLM** | `--model any --litellm-url http://...` | Depends |
-| **HTTP API** | `--url http://your-agent.com/chat` | No |
+## Supported Providers
 
-## Pro Features
+| Provider | Flag | API key |
+|---|---|:---:|
+| OpenAI | `--model gpt-4o` | `OPENAI_API_KEY` |
+| Anthropic | `--model claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
+| Ollama | `--model ollama/llama3.1:8b` | None |
+| LiteLLM | `--model any --litellm-url http://...` | Varies |
+| HTTP | `--url http://your-agent.com/chat` | None |
 
-[AgentSeal Pro](https://agentseal.org) extends the open source toolkit with MCP tool poisoning probes (+45), RAG poisoning probes (+28), multimodal attack probes (+13), behavioral genome mapping, GitHub repo security analysis, PDF reports, and a dashboard.
+## MCP Security Registry
 
-## Links
+2,200+ MCP servers scanned for security risks. Trust scores, tool analysis, and finding details for each server.
 
-- **Website and Dashboard**: [agentseal.org](https://agentseal.org)
-- **Docs**: [agentseal.org/docs](https://agentseal.org/docs)
-- **GitHub**: [github.com/AgentSeal/agentseal](https://github.com/AgentSeal/agentseal)
-- **npm package**: [npmjs.com/package/agentseal](https://www.npmjs.com/package/agentseal)
+**[agentseal.org/mcp](https://agentseal.org/mcp)**
+
+## Pro
+
+[AgentSeal Pro](https://agentseal.org) extends the scanner with MCP tool poisoning probes (+45), RAG poisoning probes (+28), multimodal attack probes (+13), behavioral genome mapping, PDF reports, and a dashboard.
+
+## Contributing
+
+If you find a detection gap or a false positive, please [open an issue](https://github.com/AgentSeal/agentseal/issues).
 
 ## License
 
-[FSL-1.1-Apache-2.0](LICENSE) - Functional Source License, Version 1.1, with Apache 2.0 future license. Copyright 2026 AgentSeal.
+[FSL-1.1-Apache-2.0](LICENSE)
