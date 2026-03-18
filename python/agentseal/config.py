@@ -26,7 +26,7 @@ _CONFIG_FILE = _CONFIG_DIR / "config.json"
 # Valid config keys and their descriptions
 _VALID_KEYS = {
     "model": "Default LLM model (e.g. claude-haiku-4-5-20251001, gpt-4o, ollama/qwen3.5:cloud)",
-    "api-key": "API key for OpenAI/Anthropic/OpenRouter",
+    "api-key": "API key for OpenAI/Anthropic/MiniMax/OpenRouter",
     "ollama-url": "Ollama base URL (default: http://localhost:11434)",
     "litellm-url": "LiteLLM proxy URL for custom LLM routing",
     "registry-url": "Custom URL for MCP server registry updates",
@@ -57,6 +57,12 @@ def get_setup_guide() -> str:
     agentseal config set model gpt-4o-mini
     agentseal config set api-key sk-xxxxx
     # Or: export OPENAI_API_KEY=sk-xxxxx
+
+  MiniMax:
+    agentseal config set model MiniMax-M2.7
+    agentseal config set api-key xxxxx
+    # Or: export MINIMAX_API_KEY=xxxxx
+    # Models: MiniMax-M2.7, MiniMax-M2.7-highspeed, MiniMax-M2.5, MiniMax-M2.5-highspeed
 
   OpenRouter (any model, one API key):
     agentseal config set model openrouter/anthropic/claude-haiku-4-5-20251001

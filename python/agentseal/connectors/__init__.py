@@ -14,6 +14,7 @@ from agentseal.connectors.anthropic import build_anthropic_chat
 from agentseal.connectors.ollama import build_ollama_chat
 from agentseal.connectors.litellm import build_litellm_chat
 from agentseal.connectors.http import build_http_chat
+from agentseal.connectors.minimax import build_minimax_chat
 
 
 def build_agent_fn(model: str, system_prompt: str, api_key: str = None,
@@ -24,6 +25,7 @@ def build_agent_fn(model: str, system_prompt: str, api_key: str = None,
       - "ollama/..." → Ollama
       - litellm_url set → LiteLLM proxy
       - "claude"/"anthropic" in name → Anthropic
+      - "minimax" in name → MiniMax
       - else → OpenAI-compatible
     """
     if model.startswith("ollama/"):
@@ -49,6 +51,13 @@ def build_agent_fn(model: str, system_prompt: str, api_key: str = None,
             api_key=api_key,
         )
 
+    if "minimax" in model.lower():
+        return build_minimax_chat(
+            model=model,
+            system_prompt=system_prompt,
+            api_key=api_key,
+        )
+
     return build_openai_chat(
         model=model,
         system_prompt=system_prompt,
@@ -63,4 +72,5 @@ __all__ = [
     "build_ollama_chat",
     "build_litellm_chat",
     "build_http_chat",
+    "build_minimax_chat",
 ]

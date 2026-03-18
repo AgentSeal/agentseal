@@ -192,9 +192,10 @@ class TestCanonicalImports:
         from agentseal.connectors.ollama import build_ollama_chat
         from agentseal.connectors.litellm import build_litellm_chat
         from agentseal.connectors.http import build_http_chat
+        from agentseal.connectors.minimax import build_minimax_chat
         assert all(callable(f) for f in [
             build_openai_chat, build_anthropic_chat, build_ollama_chat,
-            build_litellm_chat, build_http_chat,
+            build_litellm_chat, build_http_chat, build_minimax_chat,
         ])
 
     def test_scoring(self):
