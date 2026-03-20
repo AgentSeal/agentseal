@@ -156,11 +156,11 @@ def main():
 
     # Model (required for prompt/file mode)
     scan_parser.add_argument("--model", "-m", type=str, default=None,
-                             help="Model to test against (e.g. gpt-4o, claude-sonnet-4-5-20250929, ollama/qwen3-32b)")
+                             help="Model to test against (e.g. gpt-4o, claude-sonnet-4-5-20250929, MiniMax-M2.7, ollama/qwen3-32b)")
 
     # LLM connection
     scan_parser.add_argument("--api-key", type=str, default=None,
-                             help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY env)")
+                             help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / MINIMAX_API_KEY env)")
     scan_parser.add_argument("--ollama-url", type=str, default=None,
                              help="Ollama base URL (default: http://localhost:11434)")
     scan_parser.add_argument("--litellm-url", type=str, default=None,
@@ -271,7 +271,7 @@ def main():
     watch_parser.add_argument("--model", "-m", type=str, default=None,
                                help="Model to test against")
     watch_parser.add_argument("--api-key", type=str, default=None,
-                               help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY env)")
+                               help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / MINIMAX_API_KEY env)")
     watch_parser.add_argument("--ollama-url", type=str, default=None,
                                help="Ollama base URL (default: http://localhost:11434)")
     watch_parser.add_argument("--litellm-url", type=str, default=None,
