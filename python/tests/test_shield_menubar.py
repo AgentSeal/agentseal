@@ -11,10 +11,17 @@ Tests cover:
 """
 
 import queue
+import sys
 import threading
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+
+try:
+    import importlib.util
+    _HAS_RUMPS = importlib.util.find_spec("rumps") is not None
+except (ImportError, ModuleNotFoundError):
+    _HAS_RUMPS = False
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -42,16 +49,32 @@ class TestCheckRumpsAvailable:
 # ═══════════════════════════════════════════════════════════════════
 
 
-class TestEventQueue:
-    def test_concurrent_pushes(self):
-        """Multiple threads pushing events should not lose any."""
-        q: queue.Queue = queue.Queue()
+@pytest.mark.skipif(not _HAS_RUMPS, reason="rumps not installed")
+class TestShieldMenuBarAppEvents:
+    """Test event handling through the actual ShieldMenuBarApp."""
+
+    def test_on_shield_event_pushes_to_queue(self):
+        """_on_shield_event should populate the app's internal event queue."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        app._on_shield_event("threat", "/tmp/evil.md", "DANGER - SSH key exfil")
+
+        assert app._event_queue.qsize() == 1
+        event = app._event_queue.get_nowait()
+        assert event == ("threat", "/tmp/evil.md", "DANGER - SSH key exfil")
+
+    def test_on_shield_event_concurrent_pushes(self):
+        """Multiple threads calling _on_shield_event should not lose events."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
         n_threads = 10
         n_events_per_thread = 100
 
         def push_events(thread_id):
             for i in range(n_events_per_thread):
-                q.put(("threat", f"/path/{thread_id}/{i}", "summary"))
+                app._on_shield_event("threat", f"/path/{thread_id}/{i}", "summary")
 
         threads = [
             threading.Thread(target=push_events, args=(t,))
@@ -62,68 +85,27 @@ class TestEventQueue:
         for t in threads:
             t.join()
 
-        assert q.qsize() == n_threads * n_events_per_thread
+        assert app._event_queue.qsize() == n_threads * n_events_per_thread
 
-    def test_drain_returns_all_events(self):
-        """Draining queue with get_nowait should return all pushed events."""
-        q: queue.Queue = queue.Queue()
-        for i in range(50):
-            q.put(("clean", f"/path/{i}", "ok"))
+    def test_on_shield_event_multiple_types(self):
+        """Different event types all flow through the app's queue."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
 
-        drained = []
-        while True:
-            try:
-                drained.append(q.get_nowait())
-            except queue.Empty:
-                break
-
-        assert len(drained) == 50
-
-    def test_get_nowait_on_empty_raises(self):
-        """get_nowait on empty queue should raise queue.Empty."""
-        q: queue.Queue = queue.Queue()
-        with pytest.raises(queue.Empty):
-            q.get_nowait()
-
-
-# ═══════════════════════════════════════════════════════════════════
-# Shield on_event → Queue Population
-# ═══════════════════════════════════════════════════════════════════
-
-
-class TestShieldEventCallback:
-    def test_on_event_pushes_to_queue(self):
-        """Shield's on_event callback should push events to the queue."""
-        event_queue: queue.Queue = queue.Queue()
-
-        def on_shield_event(event_type, path, summary):
-            event_queue.put((event_type, path, summary))
-
-        # Simulate Shield calling back from background thread
-        t = threading.Thread(
-            target=on_shield_event,
-            args=("threat", "/tmp/evil.md", "DANGER - SSH key exfil"),
-        )
-        t.start()
-        t.join()
-
-        assert event_queue.qsize() == 1
-        event = event_queue.get_nowait()
-        assert event == ("threat", "/tmp/evil.md", "DANGER - SSH key exfil")
-
-    def test_multiple_event_types(self):
-        """Different event types all flow through the queue."""
-        event_queue: queue.Queue = queue.Queue()
-
-        def on_event(et, p, s):
-            event_queue.put((et, p, s))
-
+        app = ShieldMenuBarApp(semantic=False, notify=False)
         for etype in ("threat", "warning", "clean", "error"):
-            on_event(etype, "/tmp/file.md", f"summary-{etype}")
+            app._on_shield_event(etype, "/tmp/file.md", f"summary-{etype}")
 
-        assert event_queue.qsize() == 4
-        types = [event_queue.get_nowait()[0] for _ in range(4)]
+        assert app._event_queue.qsize() == 4
+        types = [app._event_queue.get_nowait()[0] for _ in range(4)]
         assert types == ["threat", "warning", "clean", "error"]
+
+    def test_empty_queue_raises(self):
+        """get_nowait on fresh app queue should raise queue.Empty."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        with pytest.raises(queue.Empty):
+            app._event_queue.get_nowait()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -169,48 +151,33 @@ class TestCLIMenubarFlag:
         assert "_run_shield_menubar" in source
 
     def test_menubar_dispatch(self):
-        """--menubar flag should route to _run_shield_menubar."""
-        args = MagicMock()
-        args.command = "shield"
-        args.menubar = True
+        """--menubar flag should route to _run_shield_menubar via real main()."""
+        test_argv = ["agentseal", "shield", "--menubar"]
+        with patch.object(sys, "argv", test_argv), \
+             patch("agentseal.cli._run_shield_menubar") as mock_menubar, \
+             patch("agentseal.cli._run_shield") as mock_shield:
+            from agentseal.cli import main
+            main()
 
-        with patch("agentseal.cli._run_shield_menubar") as mock_menubar:
-            with patch("agentseal.cli._run_shield") as mock_shield:
-                if getattr(args, "menubar", False):
-                    mock_menubar(args)
-                else:
-                    mock_shield(args)
-
-                mock_menubar.assert_called_once_with(args)
-                mock_shield.assert_not_called()
+            mock_menubar.assert_called_once()
+            mock_shield.assert_not_called()
 
     def test_no_menubar_dispatches_to_terminal(self):
-        """Without --menubar, should route to _run_shield."""
-        args = MagicMock()
-        args.command = "shield"
-        args.menubar = False
+        """Without --menubar, should route to _run_shield via real main()."""
+        test_argv = ["agentseal", "shield"]
+        with patch.object(sys, "argv", test_argv), \
+             patch("agentseal.cli._run_shield_menubar") as mock_menubar, \
+             patch("agentseal.cli._run_shield") as mock_shield:
+            from agentseal.cli import main
+            main()
 
-        with patch("agentseal.cli._run_shield_menubar") as mock_menubar:
-            with patch("agentseal.cli._run_shield") as mock_shield:
-                if getattr(args, "menubar", False):
-                    mock_menubar(args)
-                else:
-                    mock_shield(args)
-
-                mock_shield.assert_called_once_with(args)
-                mock_menubar.assert_not_called()
+            mock_shield.assert_called_once()
+            mock_menubar.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════
 # ShieldMenuBarApp (requires rumps)
 # ═══════════════════════════════════════════════════════════════════
-
-try:
-    import importlib.util
-    _HAS_RUMPS = importlib.util.find_spec("rumps") is not None
-except (ImportError, ModuleNotFoundError):
-    _HAS_RUMPS = False
-
 
 @pytest.mark.skipif(not _HAS_RUMPS, reason="rumps not installed")
 class TestShieldMenuBarApp:

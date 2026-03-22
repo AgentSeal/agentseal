@@ -7,12 +7,10 @@ while presenting a native macOS menu bar interface via rumps.
 Usage:
     agentseal shield --menubar
 
-Requires: pip install agentseal[shield]  (includes rumps + watchdog)
+Requires: pip install agentseal[shield-menubar]  (includes rumps + watchdog)
 """
 
 import queue
-import threading
-from typing import Optional
 
 try:
     import rumps
@@ -26,7 +24,7 @@ def check_rumps_available() -> None:
     if not _RUMPS_AVAILABLE:
         raise ImportError(
             "agentseal shield --menubar requires the 'rumps' package.\n"
-            "Install with: pip install agentseal[shield]"
+            "Install with: pip install agentseal[shield-menubar]"
         )
 
 
@@ -79,7 +77,6 @@ if _RUMPS_AVAILABLE:
 
             # Shield instance (created on start, replaced on resume)
             self._shield = None  # type: ignore[assignment]
-            self._shield_thread: Optional[threading.Thread] = None
             self._paused = False
 
             # Counters (updated from queue drain on main thread)
