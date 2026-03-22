@@ -10,10 +10,11 @@ Tests cover:
 - Version string from package
 """
 
+import pathlib
 import queue
 import sys
 import threading
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -146,7 +147,7 @@ class TestCLIMenubarFlag:
     def test_menubar_flag_exists_in_parser(self):
         """Shield parser should accept --menubar flag."""
         import agentseal.cli as cli_module
-        source = open(cli_module.__file__).read()
+        source = pathlib.Path(cli_module.__file__).read_text()
         assert "--menubar" in source
         assert "_run_shield_menubar" in source
 
@@ -202,3 +203,35 @@ class TestShieldMenuBarApp:
         app = ShieldMenuBarApp(semantic=False, notify=False)
         assert "Scans: 0" in app._stats_item.title
         assert "Threats: 0" in app._stats_item.title
+
+    def test_pause_resume_cycle(self):
+        """Pause/resume toggle should flip _paused and sender.state."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        mock_sender = MagicMock()
+        mock_sender.state = 0
+
+        with patch.object(app, '_stop_shield'), patch.object(app, '_start_shield'):
+            app._toggle_pause(mock_sender)
+            assert app._paused is True
+            assert mock_sender.state == 1
+
+            app._toggle_pause(mock_sender)
+            assert app._paused is False
+            assert mock_sender.state == 0
+
+    def test_poll_events_increments_counters(self):
+        """_poll_events should drain queue, update counters and title."""
+        from agentseal.shield_menubar import ShieldMenuBarApp, _TITLE_ALERT
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        app._on_shield_event("clean", "/tmp/a.md", "ok")
+        app._on_shield_event("threat", "/tmp/b.md", "bad")
+
+        with patch("rumps.notification"):
+            app._poll_events(None)
+
+        assert app._scan_count == 2
+        assert app._threat_count == 1
+        assert app.title == _TITLE_ALERT
