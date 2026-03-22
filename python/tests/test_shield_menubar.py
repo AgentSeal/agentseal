@@ -267,7 +267,7 @@ class TestShieldMenuBarApp:
         assert app._paused is True
 
         # Resume fails — Shield constructor throws
-        with patch("agentseal.shield_menubar.Shield", side_effect=RuntimeError("import failed")):
+        with patch("agentseal.shield.Shield", side_effect=RuntimeError("import failed")):
             app._toggle_pause(mock_sender)
 
         # Should still be paused
