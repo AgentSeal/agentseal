@@ -82,13 +82,14 @@ if _RUMPS_AVAILABLE:
             # Counters (updated from queue drain on main thread)
             self._scan_count = 0
             self._threat_count = 0
+            self._warning_count = 0
 
             # Build menu structure
             # Items with callback=None are disabled (greyed out, non-clickable)
             self._header_item = rumps.MenuItem("AgentSeal Shield", callback=None)
             self._status_item = rumps.MenuItem("Status: Starting...", callback=None)
             self._stats_item = rumps.MenuItem(
-                "Scans: 0 | Threats: 0", callback=None
+                "Scans: 0 | Threats: 0 | Warnings: 0", callback=None
             )
             self._version_item = rumps.MenuItem(
                 f"AgentSeal v{self._get_version()}", callback=None
@@ -191,11 +192,25 @@ if _RUMPS_AVAILABLE:
                         )
                     except Exception:
                         pass  # Notification permissions may not be granted
+                elif event_type == "warning":
+                    self._warning_count += 1
+                    self.title = _TITLE_ALERT
+                    try:
+                        rumps.notification(
+                            title="AgentSeal Shield — WARNING",
+                            subtitle=(
+                                path.split("/")[-1] if "/" in path else path
+                            ),
+                            message=summary,
+                        )
+                    except Exception:
+                        pass  # Notification permissions may not be granted
 
             if updated:
                 self._stats_item.title = (
                     f"Scans: {self._scan_count} "
-                    f"| Threats: {self._threat_count}"
+                    f"| Threats: {self._threat_count} "
+                    f"| Warnings: {self._warning_count}"
                 )
 
         # ── Menu click handlers ──────────────────────────────────
@@ -210,7 +225,14 @@ if _RUMPS_AVAILABLE:
                 self._status_item.title = "Status: Paused"
                 self.title = _TITLE_NORMAL
             else:
-                self._start_shield()
+                try:
+                    self._start_shield()
+                except Exception as exc:
+                    self._status_item.title = f"Status: Error — {exc}"
+                    return  # Stay paused — resume failed
+                if self._shield is None:
+                    # _start_shield caught an error internally
+                    return  # Stay paused — shield didn't start
                 self._paused = False
                 sender.state = 0  # checkmark OFF = running
 

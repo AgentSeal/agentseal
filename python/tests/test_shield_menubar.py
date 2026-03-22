@@ -235,3 +235,66 @@ class TestShieldMenuBarApp:
         assert app._scan_count == 2
         assert app._threat_count == 1
         assert app.title == _TITLE_ALERT
+
+    def test_poll_events_handles_warnings(self):
+        """_poll_events should count warnings, show alert title, and notify."""
+        from agentseal.shield_menubar import ShieldMenuBarApp, _TITLE_ALERT
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        app._on_shield_event("warning", "/tmp/c.md", "baseline changed")
+
+        with patch("rumps.notification") as mock_notif:
+            app._poll_events(None)
+
+        assert app._scan_count == 1
+        assert app._warning_count == 1
+        assert app.title == _TITLE_ALERT
+        assert "Warnings: 1" in app._stats_item.title
+        mock_notif.assert_called_once()
+        assert "WARNING" in mock_notif.call_args[1].get("title", mock_notif.call_args[0][0] if mock_notif.call_args[0] else "")
+
+    def test_resume_failure_stays_paused(self):
+        """If _start_shield raises on resume, app should stay paused."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        mock_sender = MagicMock()
+        mock_sender.state = 0
+
+        # First pause
+        with patch.object(app, '_stop_shield'):
+            app._toggle_pause(mock_sender)
+        assert app._paused is True
+
+        # Resume fails — Shield constructor throws
+        with patch("agentseal.shield_menubar.Shield", side_effect=RuntimeError("import failed")):
+            app._toggle_pause(mock_sender)
+
+        # Should still be paused
+        assert app._paused is True
+        assert mock_sender.state == 1  # checkmark still ON
+        assert "Error" in app._status_item.title
+
+    def test_resume_failure_shield_none_stays_paused(self):
+        """If _start_shield succeeds but shield.start() fails, app stays paused."""
+        from agentseal.shield_menubar import ShieldMenuBarApp
+
+        app = ShieldMenuBarApp(semantic=False, notify=False)
+        mock_sender = MagicMock()
+        mock_sender.state = 0
+
+        # First pause
+        with patch.object(app, '_stop_shield'):
+            app._toggle_pause(mock_sender)
+        assert app._paused is True
+
+        # Resume: _start_shield runs but sets self._shield = None (start() failed)
+        def start_shield_that_fails():
+            app._shield = None
+            app._status_item.title = "Status: Error — start failed"
+
+        with patch.object(app, '_start_shield', side_effect=start_shield_that_fails):
+            app._toggle_pause(mock_sender)
+
+        assert app._paused is True
+        assert mock_sender.state == 1
