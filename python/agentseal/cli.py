@@ -481,6 +481,10 @@ def main():
         "--llm-all", action="store_true",
         help="Use LLM judge on all skills (not just suspicious ones)",
     )
+    shield_parser.add_argument(
+        "--menubar", action="store_true",
+        help="Launch as a macOS menu bar app instead of terminal daemon (requires rumps)",
+    )
 
     # ── fix command ──────────────────────────────────────────────────
     fix_parser = subparsers.add_parser("fix", help="Fix dangerous skills and harden prompts")
@@ -557,7 +561,10 @@ def main():
     elif args.command == "scan-mcp":
         _run_scan_mcp(args)
     elif args.command == "shield":
-        _run_shield(args)
+        if getattr(args, "menubar", False):
+            _run_shield_menubar(args)
+        else:
+            _run_shield(args)
     elif args.command == "fix":
         _run_fix(args)
     elif args.command == "profiles":
@@ -1410,6 +1417,66 @@ def _run_scan_mcp(args):
         exit_code = 1
     if exit_code:
         sys.exit(exit_code)
+
+
+def _run_shield_menubar(args):
+    """Run shield as a macOS menu bar app."""
+    R = "\033[91m"
+    B = "\033[1m"
+    RST = "\033[0m"
+
+    try:
+        from agentseal.shield import check_watchdog_available
+        check_watchdog_available()
+    except ImportError:
+        print(
+            f"{R}Error:{RST} agentseal shield --menubar requires 'watchdog'.\n"
+            f"Install with: {B}pip install agentseal[shield]{RST}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        from agentseal.shield_menubar import ShieldMenuBarApp, check_rumps_available
+        check_rumps_available()
+    except ImportError:
+        print(
+            f"{R}Error:{RST} agentseal shield --menubar requires 'rumps' (macOS only).\n"
+            f"Install with: {B}pip install agentseal[shield]{RST}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Resolve LLM judge config (same logic as _run_shield)
+    llm_judge = None
+    from agentseal.config import get_llm_config
+    saved = get_llm_config()
+    model = getattr(args, "model", None) or saved.get("model")
+    api_key = getattr(args, "api_key", None) or saved.get("api_key")
+    base_url = getattr(args, "litellm_url", None)
+    if not base_url:
+        cli_ollama = getattr(args, "ollama_url", None)
+        if cli_ollama and cli_ollama != "http://localhost:11434":
+            base_url = cli_ollama.rstrip("/") + "/v1"
+        else:
+            base_url = saved.get("litellm_url")
+            if not base_url and saved.get("ollama_url"):
+                base_url = saved["ollama_url"].rstrip("/") + "/v1"
+    if model:
+        from agentseal.llm_judge import LLMJudge
+        llm_judge = LLMJudge(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+        )
+
+    app = ShieldMenuBarApp(
+        semantic=not getattr(args, "no_semantic", False),
+        notify=not getattr(args, "no_notify", False),
+        debounce_seconds=getattr(args, "debounce", 2.0),
+        llm_judge=llm_judge,
+    )
+    app.run()
 
 
 def _run_shield(args):

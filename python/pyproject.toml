@@ -33,7 +33,7 @@ dependencies = [
 openai = ["openai>=1.0"]
 anthropic = ["anthropic>=0.30"]
 semantic = ["onnxruntime>=1.17", "tokenizers>=0.15", "numpy>=1.24", "huggingface-hub>=0.20"]
-shield = ["watchdog>=4.0"]
+shield = ["watchdog>=4.0", "rumps>=0.4.0"]
 all = ["openai>=1.0", "anthropic>=0.30", "pyyaml>=6.0", "onnxruntime>=1.17", "tokenizers>=0.15", "numpy>=1.24", "huggingface-hub>=0.20", "watchdog>=4.0"]
 
 [project.urls]
