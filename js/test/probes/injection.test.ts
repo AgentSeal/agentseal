@@ -4,7 +4,7 @@ import { buildInjectionProbes } from "../../src/probes/injection.js";
 describe("buildInjectionProbes", () => {
   const probes = buildInjectionProbes();
 
-  it("generates 109 injection probes", () => {
+  it("generates 125 injection probes", () => {
     expect(probes).toHaveLength(125);
   });
 
