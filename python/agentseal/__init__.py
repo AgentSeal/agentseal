@@ -53,7 +53,7 @@ except ImportError:
     LLMJudge = None  # type: ignore[assignment,misc]
     LLMJudgeResult = None  # type: ignore[assignment,misc]
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 __all__ = [
     "AgentValidator",
     "ScanReport",
