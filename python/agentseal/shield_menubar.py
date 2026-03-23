@@ -47,9 +47,11 @@ def check_rumps_available() -> None:
 # Tuple of (event_type: str, path: str, summary: str)
 ShieldEvent = tuple[str, str, str]
 
-# Title constants for menu bar states
+# Title constants for menu bar states (emoji fallback when no icon)
 _TITLE_NORMAL = "🛡"
 _TITLE_ALERT = "🛡️⚠️"
+# Alert title when using icon (red dot indicator)
+_TITLE_ICON_ALERT = " !"
 
 
 if _RUMPS_AVAILABLE:
@@ -100,6 +102,10 @@ if _RUMPS_AVAILABLE:
             self._threat_count = 0
             self._warning_count = 0
 
+            # Recent threats log (max 10)
+            self._max_recent = 10
+            self._recent_events: list[tuple[str, str, str]] = []
+
             # Build menu structure
             # Items with callback=None are disabled (greyed out, non-clickable)
             self._header_item = rumps.MenuItem("AgentSeal Shield", callback=None)
@@ -107,20 +113,28 @@ if _RUMPS_AVAILABLE:
             self._stats_item = rumps.MenuItem(
                 "Scans: 0 | Threats: 0 | Warnings: 0", callback=None
             )
+            self._recent_header = rumps.MenuItem("Recent Findings", callback=None)
+            self._no_threats_item = rumps.MenuItem(
+                "  No threats detected", callback=None
+            )
             self._version_item = rumps.MenuItem(
                 f"AgentSeal v{self._get_version()}", callback=None
             )
             self._pause_item = rumps.MenuItem("Pause Monitoring")
+            self._clear_item = rumps.MenuItem("Clear Findings")
             self._quit_item = rumps.MenuItem("Quit")
 
             self.menu = [
                 self._header_item,
                 None,  # separator
                 self._status_item,
-                None,
                 self._stats_item,
                 None,
+                self._recent_header,
+                self._no_threats_item,
+                None,
                 self._pause_item,
+                self._clear_item,
                 None,
                 self._version_item,
                 None,
@@ -195,29 +209,27 @@ if _RUMPS_AVAILABLE:
                 updated = True
                 self._scan_count += 1
 
-                if event_type == "threat":
-                    self._threat_count += 1
-                    self.title = _TITLE_ALERT
+                if event_type in ("threat", "warning"):
+                    if event_type == "threat":
+                        self._threat_count += 1
+                    else:
+                        self._warning_count += 1
+                    # Show alert: use red text if icon mode, emoji if not
+                    if _find_icon():
+                        self.title = _TITLE_ICON_ALERT
+                    else:
+                        self.title = _TITLE_ALERT
+
+                    filename = path.split("/")[-1] if "/" in path else path
+                    level = "THREAT" if event_type == "threat" else "WARNING"
+
+                    # Add to recent findings menu
+                    self._add_recent_finding(level, filename, summary)
+
                     try:
                         rumps.notification(
-                            title="AgentSeal Shield - THREAT",
-                            subtitle=(
-                                path.split("/")[-1] if "/" in path else path
-                            ),
-                            message=summary,
-                        )
-                    except Exception as exc:
-                        import sys
-                        print(f"[Shield] notification failed: {exc}", file=sys.stderr)
-                elif event_type == "warning":
-                    self._warning_count += 1
-                    self.title = _TITLE_ALERT
-                    try:
-                        rumps.notification(
-                            title="AgentSeal Shield - WARNING",
-                            subtitle=(
-                                path.split("/")[-1] if "/" in path else path
-                            ),
+                            title=f"AgentSeal Shield - {level}",
+                            subtitle=filename,
                             message=summary,
                         )
                     except Exception as exc:
@@ -253,6 +265,65 @@ if _RUMPS_AVAILABLE:
                     return  # Stay paused — shield didn't start
                 self._paused = False
                 sender.state = 0  # checkmark OFF = running
+
+        def _add_recent_finding(self, level: str, filename: str, summary: str):
+            """Add a finding to the Recent Findings submenu."""
+            import time as _time
+            ts = _time.strftime("%H:%M:%S")
+            label = f"  [{level}] {ts} {filename}"
+            # Truncate summary for menu display
+            detail = summary[:80].replace("\n", " ")
+            item = rumps.MenuItem(label, callback=None)
+            item.title = label
+
+            # Remove "No threats" placeholder
+            if "No threats" in (self._no_threats_item.title or ""):
+                try:
+                    del self.menu["  No threats detected"]
+                except KeyError:
+                    pass
+
+            # Add finding with detail as submenu
+            detail_item = rumps.MenuItem(f"    {detail}", callback=None)
+            item[detail_item.title] = detail_item
+            self.menu.insert_after(self._recent_header.title, item)
+
+            # Keep max recent
+            self._recent_events.append((level, filename, summary))
+            if len(self._recent_events) > self._max_recent:
+                self._recent_events.pop(0)
+                # Remove oldest menu item (last one after header)
+                keys = list(self.menu.keys())
+                try:
+                    header_idx = keys.index(self._recent_header.title)
+                    # Find the last finding item before the separator
+                    for i in range(header_idx + len(self._recent_events) + 1,
+                                   header_idx, -1):
+                        if i < len(keys) and keys[i].startswith("  ["):
+                            del self.menu[keys[i]]
+                            break
+                except (ValueError, IndexError):
+                    pass
+
+        @rumps.clicked("Clear Findings")
+        def _clear_findings(self, sender):
+            """Clear all recent findings from the menu."""
+            self._recent_events.clear()
+            self._threat_count = 0
+            self._warning_count = 0
+            self._scan_count = 0
+            self._stats_item.title = "Scans: 0 | Threats: 0 | Warnings: 0"
+            self.title = None if _find_icon() else _TITLE_NORMAL
+            self.template = True
+            # Remove finding items from menu
+            keys = list(self.menu.keys())
+            for k in keys:
+                if k.startswith("  [THREAT]") or k.startswith("  [WARNING]"):
+                    del self.menu[k]
+            # Re-add placeholder
+            self.menu.insert_after(
+                self._recent_header.title, self._no_threats_item
+            )
 
         @rumps.clicked("Quit")
         def _quit(self, sender):
