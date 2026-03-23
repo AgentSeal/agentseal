@@ -4,8 +4,8 @@ import { buildInjectionProbes } from "../../src/probes/injection.js";
 describe("buildInjectionProbes", () => {
   const probes = buildInjectionProbes();
 
-  it("generates 109 injection probes", () => {
-    expect(probes).toHaveLength(109);
+  it("generates 125 injection probes", () => {
+    expect(probes).toHaveLength(125);
   });
 
   it("all probes have required fields", () => {
@@ -41,5 +41,10 @@ describe("buildInjectionProbes", () => {
     expect(categories.has("instruction_override")).toBe(true);
     expect(categories.has("delimiter_attack")).toBe(true);
     expect(categories.has("persona_hijack")).toBe(true);
+    expect(categories.has("a2a_injection")).toBe(true);
+    expect(categories.has("tag_char_injection")).toBe(true);
+    expect(categories.has("codechameleon")).toBe(true);
+    expect(categories.has("tool_desc_injection")).toBe(true);
+    expect(categories.has("memory_poison_injection")).toBe(true);
   });
 });

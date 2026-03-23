@@ -314,7 +314,7 @@ class TestFunctional:
         ext = build_extraction_probes()
         inj = build_injection_probes()
         assert len(ext) >= 37, f"Expected at least 37 extraction probes, got {len(ext)}"
-        assert len(inj) == 131, f"Expected 131 injection probes, got {len(inj)}"
+        assert len(inj) == 137, f"Expected 137 injection probes, got {len(inj)}"
 
     def test_canary_generation(self):
         from agentseal.probes.base import generate_canary
