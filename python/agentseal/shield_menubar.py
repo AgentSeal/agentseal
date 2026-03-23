@@ -223,8 +223,8 @@ if _RUMPS_AVAILABLE:
                     filename = path.split("/")[-1] if "/" in path else path
                     level = "THREAT" if event_type == "threat" else "WARNING"
 
-                    # Add to recent findings menu
-                    self._add_recent_finding(level, filename, summary)
+                    # Add to recent findings menu with full path for actions
+                    self._add_recent_finding(level, filename, summary, full_path=path)
 
                     try:
                         rumps.notification(
@@ -266,12 +266,15 @@ if _RUMPS_AVAILABLE:
                 self._paused = False
                 sender.state = 0  # checkmark OFF = running
 
-        def _add_recent_finding(self, level: str, filename: str, summary: str):
-            """Add a finding to the Recent Findings submenu."""
+        def _add_recent_finding(
+            self, level: str, filename: str, summary: str, full_path: str = ""
+        ):
+            """Add a finding to the Recent Findings submenu with actions."""
             import time as _time
+            from pathlib import Path as _Path
+
             ts = _time.strftime("%H:%M:%S")
             label = f"  [{level}] {ts} {filename}"
-            # Truncate summary for menu display
             detail = summary[:80].replace("\n", " ")
             item = rumps.MenuItem(label, callback=None)
             item.title = label
@@ -283,27 +286,87 @@ if _RUMPS_AVAILABLE:
                 except KeyError:
                     pass
 
-            # Add finding with detail as submenu
+            # Detail line
             detail_item = rumps.MenuItem(f"    {detail}", callback=None)
             item[detail_item.title] = detail_item
+
+            # Remedy suggestion
+            remedy = self._get_remedy(level, summary, filename)
+            remedy_item = rumps.MenuItem(f"    Remedy: {remedy}", callback=None)
+            item[remedy_item.title] = remedy_item
+
+            # Separator
+            item[None] = None
+
+            # Action: Quarantine (move to ~/.agentseal/quarantine/)
+            if full_path and _Path(full_path).exists():
+                def _quarantine_cb(_sender, _path=full_path, _label=label):
+                    try:
+                        from agentseal.fix import quarantine_skill
+                        entry = quarantine_skill(_Path(_path), reason=summary)
+                        rumps.notification(
+                            title="AgentSeal Shield",
+                            subtitle="File Quarantined",
+                            message=f"Moved to {entry.quarantine_path}",
+                        )
+                        # Remove from menu
+                        try:
+                            del self.menu[_label]
+                        except KeyError:
+                            pass
+                    except Exception as exc:
+                        rumps.notification(
+                            title="AgentSeal Shield - Error",
+                            subtitle="Quarantine failed",
+                            message=str(exc),
+                        )
+                quarantine_item = rumps.MenuItem(
+                    "    Quarantine (remove file)", callback=_quarantine_cb
+                )
+                item[quarantine_item.title] = quarantine_item
+
+                # Action: Show in Finder
+                def _reveal_cb(_sender, _path=full_path):
+                    import subprocess as _sp
+                    _sp.Popen(["open", "-R", _path])
+                reveal_item = rumps.MenuItem(
+                    "    Show in Finder", callback=_reveal_cb
+                )
+                item[reveal_item.title] = reveal_item
+
+            # Action: Ignore (dismiss from list)
+            def _ignore_cb(_sender, _label=label):
+                try:
+                    del self.menu[_label]
+                except KeyError:
+                    pass
+            ignore_item = rumps.MenuItem("    Ignore", callback=_ignore_cb)
+            item[ignore_item.title] = ignore_item
+
             self.menu.insert_after(self._recent_header.title, item)
 
             # Keep max recent
             self._recent_events.append((level, filename, summary))
             if len(self._recent_events) > self._max_recent:
                 self._recent_events.pop(0)
-                # Remove oldest menu item (last one after header)
-                keys = list(self.menu.keys())
-                try:
-                    header_idx = keys.index(self._recent_header.title)
-                    # Find the last finding item before the separator
-                    for i in range(header_idx + len(self._recent_events) + 1,
-                                   header_idx, -1):
-                        if i < len(keys) and keys[i].startswith("  ["):
-                            del self.menu[keys[i]]
-                            break
-                except (ValueError, IndexError):
-                    pass
+
+        @staticmethod
+        def _get_remedy(level: str, summary: str, filename: str) -> str:
+            """Return a short remediation suggestion based on the finding."""
+            s = summary.lower()
+            if "credential" in s or "ssh" in s or "aws" in s:
+                return "Remove credential access patterns from this file"
+            if "exfiltrat" in s or "send" in s or "evil" in s:
+                return "Remove data exfiltration instructions"
+            if "injection" in s or "ignore" in s or "override" in s:
+                return "Remove prompt injection payload"
+            if "baseline" in s or "rug pull" in s:
+                return "Review changes since last baseline"
+            if "toxic" in s or "flow" in s:
+                return "Restrict MCP server permissions"
+            if level == "THREAT":
+                return f"Review and remove dangerous content from {filename}"
+            return f"Review {filename} for suspicious patterns"
 
         @rumps.clicked("Clear Findings")
         def _clear_findings(self, sender):
