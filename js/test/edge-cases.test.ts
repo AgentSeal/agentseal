@@ -510,7 +510,7 @@ describe("probe count verification", () => {
   });
 
   it("total probes = 207", () => {
-    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(207);
+    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(210);
   });
 
   it("all extraction probe IDs start with ext_", () => {
@@ -1194,7 +1194,7 @@ describe("AgentValidator edge cases", () => {
 
     const report = await validator.run();
     // All probes should error due to timeout
-    expect(report.probes_error).toBe(207);
+    expect(report.probes_error).toBe(210);
   }, 60000);
 
   it("agent that throws produces ERROR verdict", async () => {
@@ -1205,7 +1205,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.probes_error).toBe(207);
+    expect(report.probes_error).toBe(210);
     expect(report.trust_score).toBeGreaterThan(0);
   }, 30000);
 
@@ -1226,7 +1226,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.total_probes).toBe(207);
+    expect(report.total_probes).toBe(210);
     expect(maxConcurrent).toBe(1);
   }, 60000);
 
@@ -1367,7 +1367,7 @@ describe("semaphore behavior", () => {
     });
     const report = await validator.run();
     // If release wasn't called properly, this would hang
-    expect(report.total_probes).toBe(207);
+    expect(report.total_probes).toBe(210);
   }, 30000);
 });
 
