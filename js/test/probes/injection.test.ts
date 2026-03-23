@@ -4,8 +4,8 @@ import { buildInjectionProbes } from "../../src/probes/injection.js";
 describe("buildInjectionProbes", () => {
   const probes = buildInjectionProbes();
 
-  it("generates 128 injection probes", () => {
-    expect(probes).toHaveLength(128);
+  it("generates 145 injection probes", () => {
+    expect(probes).toHaveLength(145);
   });
 
   it("all probes have required fields", () => {
@@ -47,5 +47,10 @@ describe("buildInjectionProbes", () => {
     expect(categories.has("tool_desc_injection")).toBe(true);
     expect(categories.has("memory_poison_injection")).toBe(true);
     expect(categories.has("logic_trap_injection")).toBe(true);
+    expect(categories.has("cot_hijacking")).toBe(true);
+    expect(categories.has("role_confusion")).toBe(true);
+    expect(categories.has("tool_invocation_hijacking")).toBe(true);
+    expect(categories.has("conditional_trigger")).toBe(true);
+    expect(categories.has("likert_judge")).toBe(true);
   });
 });

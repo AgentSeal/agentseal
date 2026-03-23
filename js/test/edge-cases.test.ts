@@ -501,16 +501,16 @@ describe("detectExtractionWithSemantic edge cases", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("probe count verification", () => {
-  it("extraction probes = exactly 82", () => {
-    expect(buildExtractionProbes()).toHaveLength(82);
+  it("extraction probes = exactly 84", () => {
+    expect(buildExtractionProbes()).toHaveLength(84);
   });
 
-  it("injection probes = exactly 125", () => {
-    expect(buildInjectionProbes()).toHaveLength(128);
+  it("injection probes = exactly 145", () => {
+    expect(buildInjectionProbes()).toHaveLength(145);
   });
 
-  it("total probes = 207", () => {
-    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(210);
+  it("total probes = 229", () => {
+    expect(buildExtractionProbes().length + buildInjectionProbes().length).toBe(229);
   });
 
   it("all extraction probe IDs start with ext_", () => {
@@ -528,8 +528,8 @@ describe("probe count verification", () => {
   it("canary strings are unique across all injection probes", () => {
     const probes = buildInjectionProbes();
     const canaries = probes.map((p) => p.canary).filter(Boolean) as string[];
-    expect(canaries.length).toBe(128);
-    expect(new Set(canaries).size).toBe(128);
+    expect(canaries.length).toBe(145);
+    expect(new Set(canaries).size).toBe(145);
   });
 
   it("multi-turn probes have array payloads", () => {
@@ -1194,7 +1194,7 @@ describe("AgentValidator edge cases", () => {
 
     const report = await validator.run();
     // All probes should error due to timeout
-    expect(report.probes_error).toBe(210);
+    expect(report.probes_error).toBe(229);
   }, 60000);
 
   it("agent that throws produces ERROR verdict", async () => {
@@ -1205,7 +1205,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.probes_error).toBe(210);
+    expect(report.probes_error).toBe(229);
     expect(report.trust_score).toBeGreaterThan(0);
   }, 30000);
 
@@ -1226,7 +1226,7 @@ describe("AgentValidator edge cases", () => {
       timeoutPerProbe: 5,
     });
     const report = await validator.run();
-    expect(report.total_probes).toBe(210);
+    expect(report.total_probes).toBe(229);
     expect(maxConcurrent).toBe(1);
   }, 60000);
 
@@ -1274,8 +1274,8 @@ describe("AgentValidator edge cases", () => {
     const report = await validator.run();
     expect(phases.has("extraction")).toBe(true);
     expect(phases.has("injection")).toBe(true);
-    expect(phases.get("extraction")).toBe(82);
-    expect(phases.get("injection")).toBe(128);
+    expect(phases.get("extraction")).toBe(84);
+    expect(phases.get("injection")).toBe(145);
   }, 30000);
 });
 
@@ -1367,7 +1367,7 @@ describe("semaphore behavior", () => {
     });
     const report = await validator.run();
     // If release wasn't called properly, this would hang
-    expect(report.total_probes).toBe(210);
+    expect(report.total_probes).toBe(229);
   }, 30000);
 });
 
