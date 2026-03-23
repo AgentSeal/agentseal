@@ -4,8 +4,8 @@ import { buildExtractionProbes } from "../../src/probes/extraction.js";
 describe("buildExtractionProbes", () => {
   const probes = buildExtractionProbes();
 
-  it("generates 82 extraction probes", () => {
-    expect(probes).toHaveLength(82);
+  it("generates 84 extraction probes", () => {
+    expect(probes).toHaveLength(84);
   });
 
   it("all probes have required fields", () => {
