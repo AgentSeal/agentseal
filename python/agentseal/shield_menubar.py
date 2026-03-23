@@ -10,6 +10,7 @@ Usage:
 Requires: pip install agentseal[shield-menubar]  (includes rumps + watchdog)
 """
 
+import os
 import queue
 
 try:
@@ -17,6 +18,20 @@ try:
     _RUMPS_AVAILABLE = True
 except ImportError:
     _RUMPS_AVAILABLE = False
+
+
+def _find_icon(name: str = "icon-menubar.png") -> str | None:
+    """Locate bundled icon file relative to package."""
+    # Check assets/ next to the package
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    for candidate in [
+        os.path.join(pkg_dir, "..", "..", "assets", name),  # dev layout
+        os.path.join(pkg_dir, "assets", name),              # installed
+    ]:
+        path = os.path.normpath(candidate)
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def check_rumps_available() -> None:
@@ -58,11 +73,12 @@ if _RUMPS_AVAILABLE:
         ):
             check_rumps_available()
 
+            icon_path = _find_icon()
             super().__init__(
                 name="AgentSeal Shield",
-                title=_TITLE_NORMAL,
-                icon=None,
-                template=None,
+                title=None if icon_path else _TITLE_NORMAL,
+                icon=icon_path,
+                template=True,
                 quit_button=None,
             )
 

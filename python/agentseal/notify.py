@@ -76,8 +76,44 @@ class Notifier:
         return self._notify_fallback(title, message)
 
     def _notify_macos(self, title: str, message: str, *, urgent: bool = False) -> bool:
-        """macOS notification via osascript."""
-        # Escape double quotes for AppleScript
+        """macOS notification via Swift helper (no Script Editor on click)."""
+        # Swift sends a proper UNUserNotification that dismisses on click
+        # instead of opening Script Editor like osascript does
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"')
+        safe_message = message.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " - ")
+        sound = "true" if urgent else "false"
+        swift_code = f'''
+import Foundation
+import UserNotifications
+
+let sem = DispatchSemaphore(value: 0)
+let center = UNUserNotificationCenter.current()
+center.requestAuthorization(options: [.alert, .sound]) {{ _, _ in
+    let content = UNMutableNotificationContent()
+    content.title = "{safe_title}"
+    content.body = "{safe_message}"
+    if {sound} {{ content.sound = UNNotificationSound(named: UNNotificationSoundName("Basso")) }}
+    else {{ content.sound = .default }}
+    let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+    center.add(req) {{ _ in sem.signal() }}
+}}
+_ = sem.wait(timeout: .now() + 4)
+'''
+        try:
+            subprocess.run(
+                ["swift", "-"],
+                input=swift_code,
+                capture_output=True,
+                timeout=10,
+                text=True,
+            )
+            return True
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # Fall back to osascript if Swift is not available
+            return self._notify_macos_fallback(title, message, urgent=urgent)
+
+    def _notify_macos_fallback(self, title: str, message: str, *, urgent: bool = False) -> bool:
+        """Fallback macOS notification via osascript."""
         safe_title = title.replace('"', '\\"')
         safe_message = message.replace('"', '\\"').replace("\n", " - ")
         sound = ' sound name "Basso"' if urgent else ""
