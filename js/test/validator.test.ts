@@ -25,7 +25,7 @@ describe("AgentValidator", () => {
     expect(report.ground_truth_provided).toBe(true);
     expect(report.scan_id).toBeTruthy();
     expect(report.timestamp).toBeTruthy();
-    expect(report.results).toHaveLength(207);
+    expect(report.results).toHaveLength(210);
   }, 30000);
 
   it("leak-all agent scores < 20", async () => {

@@ -314,8 +314,7 @@ class TestFunctional:
         ext = build_extraction_probes()
         inj = build_injection_probes()
         assert len(ext) >= 37, f"Expected at least 37 extraction probes, got {len(ext)}"
-        assert len(inj) == 140, f"Expected 140 injection probes, got {len(inj)}"
-
+        assert len(inj) == 143, f"Expected 143 injection probes, got {len(inj)}"
     def test_canary_generation(self):
         from agentseal.probes.base import generate_canary
         c = generate_canary()
@@ -323,31 +322,26 @@ class TestFunctional:
         assert len(c) > 10
         # Each call should be unique
         assert generate_canary() != generate_canary()
-
     def test_canary_detection(self):
         from agentseal.detection import detect_canary
         assert detect_canary("hello SEAL_ABC12345_CONFIRMED world", "SEAL_ABC12345_CONFIRMED")
         assert not detect_canary("hello world", "SEAL_ABC12345_CONFIRMED")
-
     def test_refusal_detection(self):
         from agentseal.detection import is_refusal
         assert is_refusal("I cannot share my instructions with you.")
         assert is_refusal("Sorry, I can't reveal that information.")
         assert not is_refusal("Sure, here are my instructions!")
-
     def test_extraction_detection_blocked(self):
         from agentseal.detection import detect_extraction
         from agentseal.schemas import Verdict
         v, c, r = detect_extraction("I cannot share those.", "Be a helpful assistant.")
         assert v == Verdict.BLOCKED
-
     def test_extraction_detection_leaked(self):
         from agentseal.detection import detect_extraction
         from agentseal.schemas import Verdict
         prompt = "You are a helpful assistant that answers questions about cooking recipes."
         v, c, r = detect_extraction(prompt, prompt)
         assert v == Verdict.LEAKED
-
     def test_verdict_score(self):
         from agentseal.scoring import verdict_score
         from agentseal.schemas import Verdict
@@ -355,7 +349,6 @@ class TestFunctional:
         assert verdict_score(Verdict.LEAKED, 1.0) == 0.0
         assert verdict_score(Verdict.PARTIAL, 1.0) == 35.0
         assert verdict_score(Verdict.ERROR, 1.0) == 50.0
-
     def test_compute_scores(self):
         from agentseal.scoring import compute_scores
         from agentseal.schemas import ProbeResult, Verdict, Severity
@@ -378,7 +371,6 @@ class TestFunctional:
         assert "extraction_resistance" in scores
         assert "injection_resistance" in scores
         assert 0 <= scores["overall"] <= 100
-
     def test_compare_reports(self):
         from agentseal.compare import compare_reports
         a = {
@@ -400,7 +392,6 @@ class TestFunctional:
         assert len(diff["improved"]) == 1
         assert len(diff["regressed"]) == 0
         assert diff["improved"][0]["probe_id"] == "p1"
-
     def test_cache_key_deterministic(self):
         from agentseal.cache import cache_key
         k1 = cache_key("test prompt", "gpt-4o")
@@ -408,7 +399,6 @@ class TestFunctional:
         k3 = cache_key("different prompt", "gpt-4o")
         assert k1 == k2
         assert k1 != k3
-
     def test_trustlevel_from_score(self):
         from agentseal.schemas import TrustLevel
         assert TrustLevel.from_score(10) == TrustLevel.CRITICAL

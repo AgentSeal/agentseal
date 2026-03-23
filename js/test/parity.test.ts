@@ -137,7 +137,7 @@ describe("2. Probe count parity", () => {
 
   it("injection probes: exactly 125", () => {
     const probes = buildInjectionProbes();
-    expect(probes.length).toBe(125);
+    expect(probes.length).toBe(128);
   });
 
   it("extraction probe IDs are unique", () => {
@@ -195,7 +195,7 @@ describe("2. Probe count parity", () => {
       "competing_instructions", "semantic_camouflage", "cross_language_injection",
       "authority_chain", "context_window_exploit",
       "a2a_injection", "tag_char_injection", "codechameleon",
-      "tool_desc_injection", "memory_poison_injection",
+      "tool_desc_injection", "memory_poison_injection", "logic_trap_injection",
     ]);
     expect(categories).toEqual(expectedCategories);
   });

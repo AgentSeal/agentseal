@@ -151,7 +151,7 @@ describe("verdictScore edge cases", () => {
     // BUG: No clamping on confidence input
     const score = verdictScore(Verdict.BLOCKED, 1.5);
     // 100 * 1.5 + 50 * (1 - 1.5) = 150 + (-25) = 125
-    expect(score).toBe(125);
+    expect(score).toBe(128);
   });
 
   it("confidence < 0 produces unexpected values", () => {
@@ -506,7 +506,7 @@ describe("probe count verification", () => {
   });
 
   it("injection probes = exactly 125", () => {
-    expect(buildInjectionProbes()).toHaveLength(125);
+    expect(buildInjectionProbes()).toHaveLength(128);
   });
 
   it("total probes = 207", () => {
@@ -528,8 +528,8 @@ describe("probe count verification", () => {
   it("canary strings are unique across all injection probes", () => {
     const probes = buildInjectionProbes();
     const canaries = probes.map((p) => p.canary).filter(Boolean) as string[];
-    expect(canaries.length).toBe(125);
-    expect(new Set(canaries).size).toBe(125);
+    expect(canaries.length).toBe(128);
+    expect(new Set(canaries).size).toBe(128);
   });
 
   it("multi-turn probes have array payloads", () => {
@@ -1275,7 +1275,7 @@ describe("AgentValidator edge cases", () => {
     expect(phases.has("extraction")).toBe(true);
     expect(phases.has("injection")).toBe(true);
     expect(phases.get("extraction")).toBe(82);
-    expect(phases.get("injection")).toBe(125);
+    expect(phases.get("injection")).toBe(128);
   }, 30000);
 });
 
