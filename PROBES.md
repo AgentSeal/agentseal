@@ -2,7 +2,7 @@
 
 Complete list of all attack probes used by AgentSeal to test AI agent security.
 
-**Total: 191 base probes (82 extraction + 109 injection) + 86 Pro probes (45 MCP + 28 RAG + 13 Multimodal)**
+**Total: 210 base probes (82 extraction + 128 injection) + 86 Pro probes (45 MCP + 28 RAG + 13 Multimodal)**
 
 ---
 
@@ -49,7 +49,7 @@ Extraction probes attempt to make the agent reveal its system prompt.
 
 ---
 
-## Injection Probes (109)
+## Injection Probes (128)
 
 Injection probes attempt to make the agent follow attacker-controlled instructions.
 Each probe contains a unique canary string for deterministic detection.
@@ -101,6 +101,7 @@ Each probe contains a unique canary string for deterministic detection.
 | 43 | Cross-Language Injection | 3 | Mixed 3+ languages mid-sentence to confuse safety classifiers | HIGH |
 | 44 | Authority Chain | 3 | Exploit model deference to perceived authority with escalating pressure | CRITICAL |
 | 45 | Context Window Exploit | 3 | Instruction buried in long legitimate content to push past attention window | HIGH |
+| 46 | Logic Trap | 3 | Conditional paradox, syllogistic coercion, double-bind forcing compliance | HIGH |
 
 ---
 
@@ -164,8 +165,8 @@ Multimodal probes test how agents handle adversarial content in images, audio, a
 
 | Tier | Extraction | Injection | Data Extraction | MCP | RAG | Multimodal | Total |
 |------|:----------:|:---------:|:---------------:|:---:|:---:|:----------:|:-----:|
-| **Free** | 82 | 109 | up to 20* | - | - | - | **191+** |
-| **Pro** | 82 | 109 | up to 20* | 45 | 28 | 13 | **277+** |
-| **Pro + Genome** | 82 | 109 | up to 20* | 45 | 28 | 13 | **277+ ~105 genome** |
+| **Free** | 82 | 128 | up to 20* | - | - | - | **210+** |
+| **Pro** | 82 | 128 | up to 20* | 45 | 28 | 13 | **296+** |
+| **Pro + Genome** | 82 | 128 | up to 20* | 45 | 28 | 13 | **296+ ~105 genome** |
 
 *Data extraction probes are dynamically generated from leaked injection probes (capped at 20). Count depends on agent vulnerability.
