@@ -200,27 +200,29 @@ if _RUMPS_AVAILABLE:
                     self.title = _TITLE_ALERT
                     try:
                         rumps.notification(
-                            title="AgentSeal Shield — THREAT",
+                            title="AgentSeal Shield - THREAT",
                             subtitle=(
                                 path.split("/")[-1] if "/" in path else path
                             ),
                             message=summary,
                         )
-                    except Exception:
-                        pass  # Notification permissions may not be granted
+                    except Exception as exc:
+                        import sys
+                        print(f"[Shield] notification failed: {exc}", file=sys.stderr)
                 elif event_type == "warning":
                     self._warning_count += 1
                     self.title = _TITLE_ALERT
                     try:
                         rumps.notification(
-                            title="AgentSeal Shield — WARNING",
+                            title="AgentSeal Shield - WARNING",
                             subtitle=(
                                 path.split("/")[-1] if "/" in path else path
                             ),
                             message=summary,
                         )
-                    except Exception:
-                        pass  # Notification permissions may not be granted
+                    except Exception as exc:
+                        import sys
+                        print(f"[Shield] notification failed: {exc}", file=sys.stderr)
 
             if updated:
                 self._stats_item.title = (
