@@ -151,7 +151,7 @@ describe("verdictScore edge cases", () => {
     // BUG: No clamping on confidence input
     const score = verdictScore(Verdict.BLOCKED, 1.5);
     // 100 * 1.5 + 50 * (1 - 1.5) = 150 + (-25) = 125
-    expect(score).toBe(128);
+    expect(score).toBe(125);
   });
 
   it("confidence < 0 produces unexpected values", () => {
