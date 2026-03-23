@@ -41,10 +41,10 @@ export const PROFILES: Record<string, ProfileConfig> = {
     timeout: 15,
   },
   default: {
-    description: "Standard scan (149 probes)",
+    description: "Standard scan (225 probes)",
   },
   "code-agent": {
-    description: "Coding assistant scan (194+ probes)",
+    description: "Coding assistant scan (225+ probes)",
     adaptive: true,
     mcp: true,
     semantic: true,

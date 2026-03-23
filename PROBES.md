@@ -2,7 +2,7 @@
 
 Complete list of all attack probes used by AgentSeal to test AI agent security.
 
-**Total: 210 base probes (82 extraction + 128 injection) + 86 Pro probes (45 MCP + 28 RAG + 13 Multimodal)**
+**Total: 225 base probes (82 extraction + 143 injection) + 86 Pro probes (45 MCP + 28 RAG + 13 Multimodal)**
 
 ---
 
@@ -49,7 +49,7 @@ Extraction probes attempt to make the agent reveal its system prompt.
 
 ---
 
-## Injection Probes (128)
+## Injection Probes (143)
 
 Injection probes attempt to make the agent follow attacker-controlled instructions.
 Each probe contains a unique canary string for deterministic detection.
@@ -165,8 +165,8 @@ Multimodal probes test how agents handle adversarial content in images, audio, a
 
 | Tier | Extraction | Injection | Data Extraction | MCP | RAG | Multimodal | Total |
 |------|:----------:|:---------:|:---------------:|:---:|:---:|:----------:|:-----:|
-| **Free** | 82 | 128 | up to 20* | - | - | - | **210+** |
-| **Pro** | 82 | 128 | up to 20* | 45 | 28 | 13 | **296+** |
-| **Pro + Genome** | 82 | 128 | up to 20* | 45 | 28 | 13 | **296+ ~105 genome** |
+| **Free** | 82 | 143 | up to 20* | - | - | - | **225+** |
+| **Pro** | 82 | 143 | up to 20* | 45 | 28 | 13 | **311+** |
+| **Pro + Genome** | 82 | 143 | up to 20* | 45 | 28 | 13 | **311+ ~105 genome** |
 
 *Data extraction probes are dynamically generated from leaked injection probes (capped at 20). Count depends on agent vulnerability.

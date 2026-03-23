@@ -67,7 +67,7 @@ MCP servers give AI agents access to local files, databases, APIs, and credentia
 |---|---|:---:|
 | `agentseal guard` | Scan skill files, MCP configs, toxic data flows, and supply chain changes | No |
 | `agentseal shield` | Real-time file monitoring with desktop alerts and auto-quarantine | No |
-| `agentseal scan` | Test system prompts against 191+ adversarial probes | Yes* |
+| `agentseal scan` | Test system prompts against 225+ adversarial probes | Yes* |
 | `agentseal scan-mcp` | Audit live MCP server tool descriptions for poisoning | No |
 
 \*Free with [Ollama](https://ollama.com). Cloud providers require an API key.
@@ -114,7 +114,7 @@ graph LR
 
 ## Scan
 
-191 attack probes: 82 extraction techniques, 109 injection techniques, 8 adaptive mutation transforms. Deterministic n-gram and canary token scoring. No LLM judge.
+225 attack probes: 82 extraction techniques, 143 injection techniques, 8 adaptive mutation transforms. Deterministic n-gram and canary token scoring. No LLM judge.
 
 <details>
 <summary><strong>OpenAI</strong></summary>

@@ -115,7 +115,7 @@ def __getattr__(name: str):
 
 class AgentValidator:
     """
-    Validates an AI agent's security by running 150 attack probes against it.
+    Validates an AI agent's security by running 225+ attack probes against it.
 
     The agent is accessed through a simple async function:
         async def chat(message: str) -> str
@@ -295,7 +295,7 @@ class AgentValidator:
         )
 
     async def run(self) -> _ScanReport:
-        """Run all 150 probes against the agent and return a full report."""
+        """Run all probes against the agent and return a full report."""
         scan_id = uuid.uuid4().hex[:12]
         start_time = time.time()
         all_results: list[_ProbeResult] = []

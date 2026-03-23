@@ -7,7 +7,7 @@
 
 **Find out if your AI agent can be hacked** - before someone else does.
 
-AgentSeal tests your agent's system prompt against 191+ attack probes (extraction + injection) and gives you a deterministic trust score. No AI judge. Same input, same result, every time.
+AgentSeal tests your agent's system prompt against 225+ attack probes (extraction + injection) and gives you a deterministic trust score. No AI judge. Same input, same result, every time.
 
 ```bash
 npm install agentseal
@@ -95,12 +95,12 @@ npx agentseal compare baseline.json current.json
 
 ## Attack Probes
 
-191 probes across two categories:
+225 probes across two categories:
 
 | Category | Probes | Techniques |
 |---|:---:|---|
 | **Extraction** | 82 | Direct requests, roleplay, encoding tricks (base64/ROT13/unicode), multi-turn escalation, hypothetical framing, ASCII smuggling, BiDi text |
-| **Injection** | 109 | Instruction overrides, delimiter attacks, persona hijacking, DAN variants, skeleton key, indirect injection, tool exploits, social engineering |
+| **Injection** | 143 | Instruction overrides, delimiter attacks, persona hijacking, DAN variants, skeleton key, indirect injection, tool exploits, social engineering, logic traps, cipher attacks, tag injection |
 
 With `adaptive: true`, the top 5 blocked probes are retried with 8 obfuscation transforms (base64, rot13, homoglyphs, zero-width, leetspeak, case-scramble, reverse-embed, prefix-pad).
 

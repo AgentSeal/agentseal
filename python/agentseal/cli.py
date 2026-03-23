@@ -96,41 +96,89 @@ def _pro_gate(feature: str) -> bool:
 
 
 def _print_banner(show_tagline=True):
-    """Print the AgentSeal CLI banner with gradient colors."""
+    """Print the AgentSeal CLI banner with seal logo and gradient colors."""
+    import shutil
     from agentseal import __version__
 
-    # Gradient: cyan → blue → purple → pink
-    GRADIENT_COLORS = [
-        "\033[38;5;51m",   # A
-        "\033[38;5;45m",   # G
-        "\033[38;5;39m",   # E
-        "\033[38;5;33m",   # N
-        "\033[38;5;63m",   # T
-        "\033[38;5;99m",   # S
-        "\033[38;5;135m",  # E
-        "\033[38;5;171m",  # A
-        "\033[38;5;207m",  # L
-    ]
     RESET = "\033[0m"
     DIM = "\033[90m"
 
-    # Large 2x block letters
-    c = GRADIENT_COLORS
-    rows = [
-        f"   {c[0]}  ██████╗  {c[1]} ██████╗ {c[2]}███████╗{c[3]}███╗   ██╗{c[4]}████████╗{c[5]}███████╗{c[6]}███████╗{c[7]} █████╗ {c[8]}██╗     {RESET}",
-        f"   {c[0]} ██╔══██╗ {c[1]}██╔════╝ {c[2]}██╔════╝{c[3]}████╗  ██║{c[4]}╚══██╔══╝{c[5]}██╔════╝{c[6]}██╔════╝{c[7]}██╔══██╗{c[8]}██║     {RESET}",
-        f"   {c[0]} ███████║ {c[1]}██║  ███╗{c[2]}█████╗  {c[3]}██╔██╗ ██║{c[4]}   ██║   {c[5]}███████╗{c[6]}█████╗  {c[7]}███████║{c[8]}██║     {RESET}",
-        f"   {c[0]} ██╔══██║ {c[1]}██║   ██║{c[2]}██╔══╝  {c[3]}██║╚██╗██║{c[4]}   ██║   {c[5]}╚════██║{c[6]}██╔══╝  {c[7]}██╔══██║{c[8]}██║     {RESET}",
-        f"   {c[0]} ██║  ██║ {c[1]}╚██████╔╝{c[2]}███████╗{c[3]}██║ ╚████║{c[4]}   ██║   {c[5]}███████║{c[6]}███████╗{c[7]}██║  ██║{c[8]}███████╗{RESET}",
-        f"   {c[0]} ╚═╝  ╚═╝ {c[1]} ╚═════╝ {c[2]}╚══════╝{c[3]}╚═╝  ╚═══╝{c[4]}   ╚═╝   {c[5]}╚══════╝{c[6]}╚══════╝{c[7]}╚═╝  ╚═╝{c[8]}╚══════╝{RESET}",
+    term_width = shutil.get_terminal_size((80, 24)).columns
+
+    # Full logo (needs 50 cols) and compact logo (needs 32 cols)
+    _logo_full = [
+        r"                      =*-                      ",
+        r"                .=*#%%%%%%%#+-.                ",
+        r"           .:+##%%%%%#+=*#%######=:.           ",
+        r"       .=**####*#*-         -***######+.       ",
+        r"  .+#####*+**:     +%%%%%%%:     :*#*##%%%#+.  ",
+        r"  =%%##*-.        +%%%%%%%%#.        .-*%#%%+  ",
+        r"  =###:          =#%%%%%%%%%#.          :#%%+  ",
+        r"  =##*:         -##%%%%%%%%%%*          :###+  ",
+        r"  =##*:        :*####%%%%#####*         :*##+  ",
+        r"  -**+:       .=**#############+        :***=  ",
+        r"  :*+=-      .=++*****+.*+******=       -***-  ",
+        r"  .+=-+      =*****+==   +-==++++-      ++**:  ",
+        r"   ----     *#####*+#    :=...:---:     +*#*.  ",
+        r"   :-=-:   +#######*      :=:......:   :*##+   ",
+        r"    =+++:  *#%%%%#%+=======*+===--::.  *###:   ",
+        r"    .+***- =%%%%%%%#######*******+++-:.###=    ",
+        r"     .*####. *#%%##################**+.:#*     ",
+        r"       +#%%%#- .:+%%##*****###########+..      ",
+        r"         =#%%###+-            *###%%%##+.      ",
+        r"     :**=.                     +##%%%%%#*      ",
+        r"    .*#####**#                  *##%%%%%%*     ",
+        r"    ##%%%##*+:                   *#%%%%%%%*    ",
+        r"   *%%%%%##*- *+:             -*-.*##%%%%%%*   ",
+        r"  +%%%%%%%*- +###+:         =*##%-.*##%%%%%%=  ",
+        r" +%%%%%%%** .######*+:   :=**####* :*##%%%%%%= ",
+        r" *%%%%%##+    .*##%%%#####******.   .####%%%%* ",
+        r"                .=%%%%%%%###*-                 ",
+        r"                   .+#%%%#+.                   ",
+    ]
+    _gradient_full = [
+        51, 51, 45, 45, 39, 39, 33, 33, 63, 63, 99, 99, 135, 135,
+        171, 171, 207, 207, 207, 171, 171, 135, 135, 99, 99, 63, 63, 33,
     ]
 
+    _logo_compact = [
+        r"           :+**=:           ",
+        r"      .=#%%%#==#####=.      ",
+        r" .=*#**=-. -####. :-+*##*=. ",
+        r" =#*.     -#%%%%#.     :*%= ",
+        r" =#=     :##%%%%%*.     +#= ",
+        r" -*=    .+*#######+     +*- ",
+        r" :+=    +**++:-=++*=    +*- ",
+        r" .--. .*###*:  -..:::  .**: ",
+        r"  :+=.=#%%#*----+==-:. +#+  ",
+        r"   +#*:=%%%#########*+-=#.  ",
+        r"    :#%#=.:=+++***#####-    ",
+        r"   =+-:::.        -#%%%#-   ",
+        r"  =####*           -#%%%#-  ",
+        r" -#%%%*.*+:      -*=-#%%%#: ",
+        r":#%%%#::*##*=::=*##*.=##%%#.",
+        r"         .*%%%%##=.         ",
+        r"            :+=.            ",
+    ]
+    _gradient_compact = [
+        51, 45, 39, 33, 63, 99, 99, 135, 171, 207, 207, 171, 135, 99, 63, 33, 33,
+    ]
+
+    logo_lines = _logo_full if term_width >= 50 else _logo_compact
+    gradient = _gradient_full if term_width >= 50 else _gradient_compact
+
     print()
-    for row in rows:
-        print(row)
-    print(f"   {DIM}v{__version__}{RESET}")
+    for i, line in enumerate(logo_lines):
+        color_idx = gradient[i] if i < len(gradient) else gradient[-1]
+        print(f"  \033[38;5;{color_idx}m{line}{RESET}")
+
+    # Centered text under logo
+    print()
+    print(f"  \033[38;5;51mA\033[38;5;45mg\033[38;5;39me\033[38;5;33mn\033[38;5;63mt"
+          f"\033[38;5;99mS\033[38;5;135me\033[38;5;171ma\033[38;5;207ml{RESET}"
+          f"  {DIM}v{__version__}{RESET}")
     if show_tagline:
-        print(f"{DIM}                  Security Validator for AI Agents{RESET}")
+        print(f"  {DIM}Security Scanner for AI Agents{RESET}")
     print()
 
 
@@ -1673,17 +1721,18 @@ async def _run_scan(args):
         elif args.url:
             print(f"   \033[38;5;75mTarget\033[0m   \033[90m│\033[0m  {args.url}")
         print(f"   \033[38;5;75mModel\033[0m    \033[90m│\033[0m  {args.model or 'HTTP endpoint'}")
-        inj_count = 35
+        from agentseal.probes.extraction import build_extraction_probes as _bep
+        from agentseal.probes.injection import build_injection_probes as _bip
+        ext_count = len(_bep())
+        inj_count = len(_bip())
         if args.mcp:
-            inj_count += 26
+            from agentseal.probes.mcp_tools import build_mcp_probes
+            inj_count += len(build_mcp_probes())
         if args.rag:
-            inj_count += 20
-        total_count = 37 + inj_count
-        probe_text = f"\033[38;5;51m{total_count}\033[0m (37 extraction + {inj_count} injection)"
-        if args.mcp:
-            probe_text += " + 26 mcp"
-        if args.rag:
-            probe_text += " + 20 rag"
+            from agentseal.probes.rag_poisoning import build_rag_probes
+            inj_count += len(build_rag_probes())
+        total_count = ext_count + inj_count
+        probe_text = f"\033[38;5;51m{total_count}\033[0m ({ext_count} extraction + {inj_count} injection)"
         if args.adaptive:
             probe_text += " + mutations"
         if args.semantic:

@@ -32,10 +32,10 @@ PROFILES: dict[str, ProfileConfig] = {
         use_canary_only=True, concurrency=5, timeout=15,
     ),
     "default": ProfileConfig(
-        description="Standard scan (149 probes)",
+        description="Standard scan (225 probes)",
     ),
     "code-agent": ProfileConfig(
-        description="Coding assistant scan (194+ probes)",
+        description="Coding assistant scan (225+ probes)",
         adaptive=True, mcp=True, semantic=True,
     ),
     "support-bot": ProfileConfig(
