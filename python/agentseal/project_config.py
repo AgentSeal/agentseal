@@ -259,3 +259,66 @@ def generate_unlisted_findings(
             ))
 
     return findings
+
+
+def generate_config_yaml(
+    agents: list[AgentConfigResult],
+    mcp_servers: list[dict],
+) -> str:
+    """Generate .agentseal.yaml content from detected environment.
+
+    Uses string templating (not yaml.dump) to preserve comments.
+    """
+    # Filter to installed agents only
+    installed = [a for a in agents if a.status in ("found", "installed_no_config")]
+
+    # Build agents section
+    if installed:
+        agent_lines = "\n".join(f"  - {a.agent_type}" for a in installed)
+        agents_section = (
+            f"allowed_agents:               # REVIEW: remove any you don't trust\n"
+            f"{agent_lines}"
+        )
+    else:
+        agents_section = "allowed_agents: []"
+
+    # Build MCP servers section
+    if mcp_servers:
+        srv_lines = []
+        for srv in mcp_servers:
+            name = srv.get("name", "unknown")
+            agent = srv.get("agent_type", "unknown")
+            srv_lines.append(f"  - {name}@{agent}")
+        servers_section = (
+            "allowed_mcp_servers:          # REVIEW: remove any you don't trust\n"
+            + "\n".join(srv_lines)
+        )
+    else:
+        servers_section = "allowed_mcp_servers: []"
+
+    return (
+        f"# AgentSeal Guard project configuration\n"
+        f"# Docs: https://agentseal.com/docs/guard-init\n"
+        f"\n"
+        f"# Exit non-zero if any finding at this level or above\n"
+        f"# Values: safe | warning | danger\n"
+        f"fail_on: danger\n"
+        f"\n"
+        f"# Agents permitted in this project (use agent_type slugs)\n"
+        f"# Unlisted agents trigger a GUARD-001 finding\n"
+        f"{agents_section}\n"
+        f"\n"
+        f"# MCP servers permitted (name@agent_type to disambiguate)\n"
+        f"# Unlisted servers trigger a GUARD-002 finding\n"
+        f"{servers_section}\n"
+        f"\n"
+        f"# Paths to skip during scanning (prefix match)\n"
+        f"ignore_paths:\n"
+        f"  - node_modules\n"
+        f"  - .git\n"
+        f"  - __pycache__\n"
+        f"\n"
+        f"# Suppress specific findings (reason required)\n"
+        f"# Use finding code (e.g. SKILL-001) or code+path (e.g. SKILL-001:./CLAUDE.md)\n"
+        f"ignore_findings: []\n"
+    )

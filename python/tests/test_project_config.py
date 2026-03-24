@@ -4,6 +4,7 @@ import yaml
 from agentseal.guard_models import AgentConfigResult
 from agentseal.project_config import (
     ProjectConfig,
+    generate_config_yaml,
     generate_unlisted_findings,
     load_project_config,
     resolve_project_config,
@@ -261,3 +262,56 @@ class TestShouldFail:
 
     def test_fail_on_safe_no_findings(self):
         assert should_fail("safe", has_danger=False, has_warning=False, has_safe=False) is False
+
+
+class TestGenerateConfigYaml:
+    def test_empty_environment(self):
+        yaml_str = generate_config_yaml(agents=[], mcp_servers=[])
+        assert "fail_on: danger" in yaml_str
+        assert "allowed_agents: []" in yaml_str
+        assert "allowed_mcp_servers: []" in yaml_str
+
+    def test_with_agents_and_servers(self):
+        agents = [
+            AgentConfigResult(
+                name="Claude Desktop", config_path="/fake",
+                agent_type="claude-desktop", mcp_servers=2,
+                skills_count=1, status="found",
+            ),
+        ]
+        mcps = [
+            {"name": "filesystem", "agent_type": "claude-desktop", "command": "node"},
+            {"name": "slack", "agent_type": "claude-desktop", "command": "node"},
+        ]
+        yaml_str = generate_config_yaml(agents=agents, mcp_servers=mcps)
+        assert "claude-desktop" in yaml_str
+        assert "filesystem@claude-desktop" in yaml_str
+        assert "slack@claude-desktop" in yaml_str
+        assert "# REVIEW" in yaml_str
+
+    def test_not_installed_agents_excluded(self):
+        agents = [
+            AgentConfigResult(
+                name="Windsurf", config_path="",
+                agent_type="windsurf", mcp_servers=0,
+                skills_count=0, status="not_installed",
+            ),
+        ]
+        yaml_str = generate_config_yaml(agents=agents, mcp_servers=[])
+        assert "windsurf" not in yaml_str
+
+    def test_output_is_valid_yaml(self):
+        agents = [
+            AgentConfigResult(
+                name="Cursor", config_path="/fake",
+                agent_type="cursor", mcp_servers=1,
+                skills_count=0, status="found",
+            ),
+        ]
+        mcps = [{"name": "db", "agent_type": "cursor", "command": "node"}]
+        yaml_str = generate_config_yaml(agents=agents, mcp_servers=mcps)
+        # Strip comments for yaml.safe_load validation
+        lines = [line for line in yaml_str.splitlines() if not line.strip().startswith("#")]
+        data = yaml.safe_load("\n".join(lines))
+        assert data["fail_on"] == "danger"
+        assert "cursor" in data["allowed_agents"]
