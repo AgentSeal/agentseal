@@ -322,3 +322,117 @@ def generate_config_yaml(
         f"# Use finding code (e.g. SKILL-001) or code+path (e.g. SKILL-001:./CLAUDE.md)\n"
         f"ignore_findings: []\n"
     )
+
+
+def run_guard_init(
+    *,
+    target_dir: Optional[Path] = None,
+    force: bool = False,
+    interactive: bool = True,
+) -> bool:
+    """Run the guard init flow.
+
+    Args:
+        target_dir: Directory to write .agentseal.yaml into.
+        force: Overwrite existing config.
+        interactive: Prompt for confirmation (False for testing).
+
+    Returns:
+        True if config was written, False otherwise.
+    """
+    from agentseal.machine_discovery import scan_directory, scan_machine
+
+    if target_dir is None:
+        target_dir = Path.cwd()
+    target_dir = Path(target_dir).resolve()
+
+    config_file = target_dir / _CONFIG_FILENAME
+
+    # Check existing
+    if config_file.exists() and not force:
+        print(f"Config exists at {config_file}. Use --force to overwrite.")
+        return False
+
+    # Detect environment
+    agents, machine_mcps, _ = scan_machine()
+    _, dir_mcps, dir_skills = scan_directory(target_dir)
+
+    # Merge MCP servers (machine + directory, deduplicate by name+agent_type)
+    seen: set[tuple[str, str]] = set()
+    all_mcps: list[dict] = []
+    for srv in machine_mcps + dir_mcps:
+        key = (srv.get("name", ""), srv.get("agent_type", ""))
+        if key not in seen:
+            seen.add(key)
+            all_mcps.append(srv)
+
+    installed = [a for a in agents if a.status in ("found", "installed_no_config")]
+
+    # Generate YAML
+    yaml_content = generate_config_yaml(agents=agents, mcp_servers=all_mcps)
+
+    if interactive:
+        B = "\033[1m"
+        D = "\033[90m"
+        RST = "\033[0m"
+
+        print()
+        print(f"  {B}AgentSeal Guard Init{RST}")
+        print(f"  {'=' * 20}")
+        print()
+        print(f"  {D}Scanning environment...{RST}")
+        print()
+
+        # Agents
+        print(f"  {B}AGENTS ({len(installed)} found){RST}")
+        for a in installed:
+            print(f"  {a.name:<20s}  {D}{a.config_path}{RST}")
+        if not installed:
+            print(f"  {D}No agents detected{RST}")
+        print()
+
+        # MCP servers
+        print(f"  {B}MCP SERVERS ({len(all_mcps)} found){RST}")
+        for srv in all_mcps:
+            name = srv.get("name", "?")
+            agent = srv.get("agent_type", "?")
+            transport = "stdio" if srv.get("command") else "sse"
+            print(f"  {name:<20s}  {agent:<20s}  {D}{transport}{RST}")
+        if not all_mcps:
+            print(f"  {D}No MCP servers detected{RST}")
+        print()
+
+        # Skills
+        print(f"  {B}SKILLS ({len(dir_skills)} found){RST}")
+        for sp in dir_skills:
+            print(f"  {sp.name:<20s}  {D}{sp}{RST}")
+        if not dir_skills:
+            print(f"  {D}No skills detected{RST}")
+        print()
+
+        # Show proposed config
+        print(f"  {D}Proposed .agentseal.yaml:{RST}")
+        print(f"  {D}{'-' * 40}{RST}")
+        for line in yaml_content.splitlines():
+            print(f"  {line}")
+        print(f"  {D}{'-' * 40}{RST}")
+        print()
+
+        try:
+            answer = input("  Write .agentseal.yaml? [Y/n] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        if answer and answer != "y":
+            print("  Aborted.")
+            return False
+
+    # Write config
+    config_file.write_text(yaml_content, encoding="utf-8")
+    if interactive:
+        print()
+        print(f"  Config written to {config_file}")
+        print("  Review the allowlists, then run: agentseal guard")
+        print()
+
+    return True
