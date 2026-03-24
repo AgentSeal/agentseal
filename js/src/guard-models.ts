@@ -71,6 +71,9 @@ export interface MCPServerResult {
   source_file: string;
   verdict: GuardVerdict;
   findings: MCPFinding[];
+  registry_score?: number;
+  registry_level?: string;
+  registry_findings_count?: number;
 }
 
 /** Return the highest-severity finding from an MCPServerResult, or undefined. */
@@ -144,6 +147,120 @@ export interface BaselineChangeResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// UNLISTED FINDING
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface UnlistedFinding {
+  code: string;        // "GUARD-001" or "GUARD-002"
+  title: string;
+  description: string;
+  severity: string;    // default: "medium"
+  item_name: string;
+  item_type: string;   // "agent" or "mcp_server"
+}
+
+export function unlistedFindingToDict(f: UnlistedFinding): Record<string, any> {
+  return { ...f };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CUSTOM FINDING
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface CustomFinding {
+  code: string;
+  title: string;
+  severity: string;
+  verdict: string;
+  remediation: string;
+  rule_file: string;
+  entity_type: string;
+  entity_name: string;
+}
+
+export function customFindingFromDict(d: Record<string, any>): CustomFinding {
+  return {
+    code: d.code ?? "",
+    title: d.title ?? "",
+    severity: d.severity ?? "medium",
+    verdict: d.verdict ?? "warning",
+    remediation: d.remediation ?? "",
+    rule_file: d.rule_file ?? "",
+    entity_type: d.entity_type ?? "",
+    entity_name: d.entity_name ?? "",
+  };
+}
+
+export function customFindingToDict(f: CustomFinding): Record<string, any> {
+  return { ...f };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DELTA ENTRY + DELTA RESULT
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface DeltaEntry {
+  change_type: string;
+  entity_type: string;
+  entity_name: string;
+  code?: string;
+  title?: string;
+  old_verdict?: string;
+  new_verdict?: string;
+  severity?: string;
+}
+
+export function deltaEntryToDict(e: DeltaEntry): Record<string, any> {
+  const d: Record<string, any> = {
+    change_type: e.change_type,
+    entity_type: e.entity_type,
+    entity_name: e.entity_name,
+  };
+  if (e.code) d.code = e.code;
+  if (e.title) d.title = e.title;
+  if (e.old_verdict) d.old_verdict = e.old_verdict;
+  if (e.new_verdict) d.new_verdict = e.new_verdict;
+  if (e.severity) d.severity = e.severity;
+  return d;
+}
+
+export class DeltaResult {
+  previous_timestamp: string;
+  entries: DeltaEntry[];
+
+  constructor(previous_timestamp: string, entries: DeltaEntry[] = []) {
+    this.previous_timestamp = previous_timestamp;
+    this.entries = entries;
+  }
+
+  get total_new(): number {
+    return this.entries.filter(
+      (e) => e.change_type === "new" || e.change_type === "new_entity",
+    ).length;
+  }
+
+  get total_resolved(): number {
+    return this.entries.filter(
+      (e) => e.change_type === "resolved" || e.change_type === "removed_entity",
+    ).length;
+  }
+
+  get total_changed(): number {
+    return this.entries.filter((e) => e.change_type === "changed").length;
+  }
+
+  toDict(): Record<string, any> {
+    return {
+      previous_timestamp: this.previous_timestamp,
+      entries: this.entries.map(deltaEntryToDict),
+      total_new: this.total_new,
+      total_resolved: this.total_resolved,
+      total_changed: this.total_changed,
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // GUARD REPORT (top-level result)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -157,6 +274,9 @@ export interface GuardReport {
   toxic_flows: ToxicFlowResult[];
   baseline_changes: BaselineChangeResult[];
   llm_tokens_used: number;
+  unlisted_findings?: UnlistedFinding[];
+  custom_findings?: CustomFinding[];
+  config_path?: string;
 }
 
 /** Count items with a given verdict across results. */
@@ -205,4 +325,31 @@ export function allActions(report: GuardReport): string[] {
 
   all.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99));
   return all.map((x) => x.remediation);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// GUARD REPORT DESERIALIZATION
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Build a GuardReport from a plain dict (e.g. parsed JSON). */
+export function guardReportFromDict(d: Record<string, any>): GuardReport {
+  return {
+    timestamp: d.timestamp ?? "",
+    duration_seconds: d.duration_seconds ?? 0,
+    agents_found: d.agents_found ?? [],
+    skill_results: d.skill_results ?? [],
+    mcp_results: (d.mcp_results ?? []).map((m: any) => ({
+      ...m,
+      registry_score: m.registry?.score ?? m.registry_score,
+      registry_level: m.registry?.level ?? m.registry_level,
+      registry_findings_count: m.registry?.findings_count ?? m.registry_findings_count,
+    })),
+    mcp_runtime_results: d.mcp_runtime_results ?? [],
+    toxic_flows: d.toxic_flows ?? [],
+    baseline_changes: d.baseline_changes ?? [],
+    llm_tokens_used: d.llm_tokens_used ?? 0,
+    unlisted_findings: d.unlisted_findings ?? [],
+    custom_findings: (d.custom_findings ?? []).map(customFindingFromDict),
+    config_path: d.config_path ?? "",
+  };
 }

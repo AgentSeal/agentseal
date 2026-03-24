@@ -86,12 +86,17 @@ export {
   GuardVerdict, SEVERITY_ORDER,
   topSkillFinding, topMCPFinding,
   totalDangers, totalWarnings, totalSafe, hasCritical, allActions,
+  guardReportFromDict,
+  customFindingFromDict, customFindingToDict,
+  unlistedFindingToDict, deltaEntryToDict,
+  DeltaResult,
   type SkillFinding, type SkillResult,
   type MCPFinding, type MCPServerResult,
   type AgentConfigResult,
   type MCPRuntimeFinding, type MCPRuntimeResult,
   type ToxicFlowResult, type BaselineChangeResult,
   type GuardReport,
+  type UnlistedFinding, type CustomFinding, type DeltaEntry,
 } from "./guard-models.js";
 
 // Skill scanner
