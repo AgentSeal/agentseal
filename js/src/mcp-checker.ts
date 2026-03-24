@@ -7,6 +7,7 @@
  * Port of Python agentseal/mcp_checker.py — same checks, same codes.
  */
 
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import { GuardVerdict, type MCPFinding, type MCPServerResult } from "./guard-models.js";
@@ -155,7 +156,11 @@ export class MCPConfigChecker {
     const findings: MCPFinding[] = [];
     const home = homedir();
 
-    for (const arg of args) {
+    const resolvedArgs = args.map((a: string) => {
+      try { return realpathSync(a); } catch { return a; }
+    });
+
+    for (const arg of resolvedArgs) {
       if (typeof arg !== "string") continue;
       const expanded = arg.startsWith("~") ? home + arg.slice(1) : arg;
       for (const [suffix, description] of SENSITIVE_PATHS) {
@@ -326,6 +331,99 @@ export class MCPConfigChecker {
           severity: "high",
           remediation: `Pin the version: uvx ${pkg}==<version>`,
         });
+      }
+    }
+
+    // bunx package without @version
+    const bunxMatch = allStr.match(/bunx\s+(@?[a-zA-Z0-9_./-]+(?:@[^\s]+)?)/);
+    if (bunxMatch) {
+      const pkg = bunxMatch[1]!;
+      const parts = pkg.split("/");
+      const lastPart = parts[parts.length - 1] ?? pkg;
+      const hasVersion = lastPart.includes("@") && !lastPart.startsWith("@");
+      if (!hasVersion) {
+        findings.push({
+          code: "MCP-007",
+          title: "Unpinned bunx package",
+          description: `MCP server '${name}' installs '${pkg}' via bunx without version pinning. A supply chain attack could inject malicious code.`,
+          severity: "medium",
+          remediation: `Pin the version: bunx ${pkg}@<version>`,
+        });
+      }
+    }
+
+    // deno run without @version
+    const denoMatch = allStr.match(/deno\s+run\s+(?:--allow-\S+\s+)*(\S+)/);
+    if (denoMatch) {
+      const target = denoMatch[1]!;
+      if (!target.startsWith(".") && !target.startsWith("/")) {
+        if (!target.includes("@")) {
+          findings.push({
+            code: "MCP-007",
+            title: "Unpinned deno package",
+            description: `MCP server '${name}' runs '${target}' via deno without version pinning.`,
+            severity: "medium",
+            remediation: `Pin the version: deno run ${target}@<version>`,
+          });
+        }
+      }
+    }
+
+    // docker run without tag or with :latest
+    const dockerMatch = allStr.match(/docker\s+run\s+(?:-[^\s]+\s+)*([a-zA-Z0-9_./-]+(?::[^\s]+)?)/);
+    if (dockerMatch) {
+      const image = dockerMatch[1]!;
+      if (!image.includes(":")) {
+        findings.push({
+          code: "MCP-007",
+          title: "Unpinned docker image",
+          description: `MCP server '${name}' runs docker image '${image}' without a tag. This defaults to :latest which is mutable.`,
+          severity: "medium",
+          remediation: `Pin the image tag: docker run ${image}:<version>`,
+        });
+      } else if (image.endsWith(":latest")) {
+        findings.push({
+          code: "MCP-007",
+          title: "Unpinned docker image (:latest)",
+          description: `MCP server '${name}' runs docker image '${image}' with :latest tag. This is mutable and not reproducible.`,
+          severity: "medium",
+          remediation: `Pin a specific image tag instead of :latest`,
+        });
+      }
+    }
+
+    // pip install without ==version
+    const pipMatch = allStr.match(/pip3?\s+install\s+([a-zA-Z0-9_.-]+)/);
+    if (pipMatch) {
+      const pkg = pipMatch[1]!;
+      if (!pkg.startsWith("-")) {
+        const afterPkg = allStr.split(pipMatch[0]!).slice(1).join("").slice(0, 30);
+        if (!afterPkg.includes("==")) {
+          findings.push({
+            code: "MCP-007",
+            title: "Unpinned pip package",
+            description: `MCP server '${name}' installs '${pkg}' via pip without version pinning.`,
+            severity: "medium",
+            remediation: `Pin the version: pip install ${pkg}==<version>`,
+          });
+        }
+      }
+    }
+
+    // go run without @version
+    const goMatch = allStr.match(/go\s+run\s+([a-zA-Z0-9_./@-]+)/);
+    if (goMatch) {
+      const target = goMatch[1]!;
+      if (!target.startsWith(".") && !target.startsWith("/")) {
+        if (!target.includes("@")) {
+          findings.push({
+            code: "MCP-007",
+            title: "Unpinned go package",
+            description: `MCP server '${name}' runs '${target}' via go run without version pinning.`,
+            severity: "medium",
+            remediation: `Pin the version: go run ${target}@<version>`,
+          });
+        }
       }
     }
 

@@ -48,15 +48,13 @@ export interface BaselineChange {
 // ═══════════════════════════════════════════════════════════════════════
 
 function configFingerprint(server: Record<string, any>): string {
-  const command = server.command ?? "";
-  const args = (server.args ?? [])
-    .filter((a: any): a is string => typeof a === "string")
-    .sort();
-  const envKeys = Object.keys(server.env ?? {})
-    .filter((k): k is string => typeof k === "string")
-    .sort();
-
-  const parts = [command, JSON.stringify(args), JSON.stringify(envKeys)];
+  const parts = [
+    server.command ?? "",
+    JSON.stringify([...(server.args ?? [])].map(String).sort()),
+    JSON.stringify(Object.keys(server.env ?? {}).map(String).sort()),
+    server.url ?? "",
+    JSON.stringify(Object.keys(server.headers ?? {}).map(String).sort()),
+  ];
   return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
