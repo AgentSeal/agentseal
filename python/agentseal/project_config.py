@@ -8,9 +8,12 @@ per-project: allowlists, ignore rules, and CI gate thresholds.
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
+
+_CONFIG_FILENAME = ".agentseal.yaml"
 
 _VALID_FAIL_ON = ("safe", "warning", "danger")
 
@@ -87,3 +90,58 @@ def load_project_config(path: Path) -> ProjectConfig:
         ignore_findings=ignore_findings,
         config_path=str(path),
     )
+
+
+def resolve_project_config(
+    *,
+    config_path: Optional[Path] = None,
+    search_dir: Optional[Path] = None,
+) -> Optional[ProjectConfig]:
+    """Find and load project config using resolution order.
+
+    Resolution order:
+    1. config_path (explicit --config flag)
+    2. .agentseal.yaml in search_dir
+    3. Walk up parents to git root or $HOME
+
+    Args:
+        config_path: Explicit path to config file (--config flag).
+        search_dir: Directory to start searching from (default: CWD).
+
+    Returns:
+        ProjectConfig if found, None otherwise.
+
+    Raises:
+        FileNotFoundError: If config_path is given but doesn't exist.
+    """
+    # 1. Explicit config path
+    if config_path is not None:
+        config_path = Path(config_path)
+        if not config_path.is_file():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        return load_project_config(config_path)
+
+    # 2. Search from directory
+    if search_dir is None:
+        search_dir = Path.cwd()
+    search_dir = Path(search_dir).resolve()
+
+    home = Path.home().resolve()
+    current = search_dir
+
+    while True:
+        candidate = current / _CONFIG_FILENAME
+        if candidate.is_file():
+            return load_project_config(candidate)
+
+        # Stop conditions: hit .git, home, or root
+        if (current / ".git").exists():
+            break
+        if current == home:
+            break
+        parent = current.parent
+        if parent == current:
+            break  # filesystem root
+        current = parent
+
+    return None

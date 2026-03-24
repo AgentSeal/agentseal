@@ -2,7 +2,7 @@ import pytest
 import yaml
 from pathlib import Path
 
-from agentseal.project_config import ProjectConfig, load_project_config
+from agentseal.project_config import ProjectConfig, load_project_config, resolve_project_config
 
 
 class TestLoadProjectConfig:
@@ -78,3 +78,58 @@ class TestLoadProjectConfig:
         }))
         cfg = load_project_config(f)
         assert cfg.allowed_mcp_servers == ["filesystem"]
+
+
+class TestResolveProjectConfig:
+    def test_find_in_cwd(self, tmp_path):
+        f = tmp_path / ".agentseal.yaml"
+        f.write_text("fail_on: danger\n")
+        cfg = resolve_project_config(search_dir=tmp_path)
+        assert cfg is not None
+        assert cfg.fail_on == "danger"
+
+    def test_walk_up_to_parent(self, tmp_path):
+        (tmp_path / ".agentseal.yaml").write_text("fail_on: warning\n")
+        child = tmp_path / "subdir"
+        child.mkdir()
+        cfg = resolve_project_config(search_dir=child)
+        assert cfg is not None
+        assert cfg.fail_on == "warning"
+
+    def test_stop_at_git_root(self, tmp_path):
+        # Config above git root should NOT be found
+        (tmp_path / ".agentseal.yaml").write_text("fail_on: warning\n")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+        cfg = resolve_project_config(search_dir=repo)
+        assert cfg is None
+
+    def test_config_at_git_root(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+        (repo / ".agentseal.yaml").write_text("fail_on: danger\n")
+        child = repo / "src"
+        child.mkdir()
+        cfg = resolve_project_config(search_dir=child)
+        assert cfg is not None
+        assert cfg.fail_on == "danger"
+
+    def test_explicit_config_path(self, tmp_path):
+        f = tmp_path / "custom.yaml"
+        f.write_text("fail_on: warning\n")
+        cfg = resolve_project_config(config_path=f)
+        assert cfg is not None
+        assert cfg.fail_on == "warning"
+
+    def test_explicit_config_missing_raises(self, tmp_path):
+        f = tmp_path / "missing.yaml"
+        with pytest.raises(FileNotFoundError):
+            resolve_project_config(config_path=f)
+
+    def test_no_config_returns_none(self, tmp_path):
+        # Create .git to guarantee a stop boundary
+        (tmp_path / ".git").mkdir()
+        cfg = resolve_project_config(search_dir=tmp_path)
+        assert cfg is None
