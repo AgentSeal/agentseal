@@ -20,7 +20,7 @@ _VALID_FAIL_ON = ("safe", "warning", "danger")
 
 _KNOWN_KEYS = {
     "fail_on", "allowed_agents", "allowed_mcp_servers",
-    "ignore_paths", "ignore_findings",
+    "ignore_paths", "ignore_findings", "rules_paths",
 }
 
 
@@ -32,6 +32,7 @@ class ProjectConfig:
     allowed_mcp_servers: list[str] = field(default_factory=list)
     ignore_paths: list[str] = field(default_factory=list)
     ignore_findings: list[dict] = field(default_factory=list)
+    rules_paths: list[str] = field(default_factory=list)
     config_path: str = ""
 
 
@@ -89,6 +90,7 @@ def load_project_config(path: Path) -> ProjectConfig:
         allowed_mcp_servers=data.get("allowed_mcp_servers", []) or [],
         ignore_paths=data.get("ignore_paths", []) or [],
         ignore_findings=ignore_findings,
+        rules_paths=data.get("rules_paths", []) or [],
         config_path=str(path),
     )
 
