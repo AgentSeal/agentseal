@@ -38,9 +38,8 @@ def test_normalize_unicode_homoglyphs():
     # Fullwidth is the reliable NFKC case; we test Cyrillic separately.
     cyrillic_a = "\u0430"  # Cyrillic Small Letter A
     result = normalize_unicode(cyrillic_a)
-    # NFKC does NOT remap Cyrillic to Latin (they are distinct codepoints).
-    # This test documents that behavior.
-    assert result == cyrillic_a
+    # TR39 confusable mapping now remaps Cyrillic lookalikes to Latin.
+    assert result == "a"
 
 
 def test_normalize_unicode_fullwidth():

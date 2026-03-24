@@ -33,8 +33,21 @@ import httpx
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════
 
-CLIENT_NAME = "agentseal"
-CLIENT_VERSION = "0.5.2"
+# Mimic a common MCP client to prevent detection evasion.
+# Malicious servers can serve clean tool descriptions when they detect
+# a security scanner by client name, then serve poisoned ones to real agents.
+_CLIENT_POOL = [
+    ("claude-ai", "1.0.8"),
+    ("cursor", "0.48.2"),
+    ("vscode-mcp", "1.2.0"),
+    ("windsurf", "1.5.1"),
+]
+
+def _pick_client():
+    import random
+    return random.choice(_CLIENT_POOL)
+
+CLIENT_NAME, CLIENT_VERSION = _pick_client()
 PROTOCOL_VERSION = "2025-03-26"
 
 # Limits — prevent resource exhaustion from malicious/broken servers

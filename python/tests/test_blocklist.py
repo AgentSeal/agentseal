@@ -11,12 +11,19 @@ from agentseal.blocklist import Blocklist
 
 class TestBlocklist:
     def test_empty_blocklist(self, tmp_path):
-        """Empty blocklist reports nothing blocked."""
+        """Blocklist with no cache and cleared seeds reports nothing blocked."""
         bl = Blocklist()
         bl.CACHE_PATH = tmp_path / "nonexistent.json"
         bl._loaded = True  # Skip loading
+        bl._hashes = set()  # Clear seed hashes to test empty state
         assert bl.is_blocked("abc123") is False
         assert bl.size == 0
+
+    def test_seed_hashes_present(self):
+        """Blocklist ships with seed hashes for offline protection."""
+        bl = Blocklist()
+        assert len(bl._SEED_HASHES) >= 10, "Should have at least 10 seed hashes"
+        assert len(bl._hashes) == len(bl._SEED_HASHES), "Initial hashes should equal seeds"
 
     def test_known_hash_blocked(self):
         bl = Blocklist()

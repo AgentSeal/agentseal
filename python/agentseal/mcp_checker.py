@@ -165,9 +165,14 @@ class MCPConfigChecker:
                 continue
             # Expand leading ~ only (not ~ in middle of path)
             expanded = arg if not arg.startswith("~") else home + arg[1:]
+            # Resolve symlinks to catch /tmp/innocent -> ~/.ssh bypasses
+            try:
+                resolved = os.path.realpath(expanded)
+            except (OSError, ValueError):
+                resolved = expanded
             for sensitive_suffix, description in _SENSITIVE_PATHS:
                 sensitive_full = os.path.join(home, sensitive_suffix)
-                if sensitive_full in expanded or sensitive_suffix in arg:
+                if sensitive_full in expanded or sensitive_suffix in arg or sensitive_full in resolved:
                     findings.append(MCPFinding(
                         code="MCP-001",
                         title=f"Access to {description}",
@@ -383,6 +388,76 @@ class MCPConfigChecker:
                     description=f"MCP server '{name}' installs '{pkg}' via uvx without version pinning.",
                     severity="high",
                     remediation=f"Pin the version: uvx {pkg}==<version>",
+                ))
+
+        # bunx (Bun's npx equivalent) without @version
+        bunx_match = re.search(r"bunx\s+(@?[a-zA-Z0-9_./-]+(?:@[^\s]+)?)", all_str)
+        if bunx_match:
+            pkg = bunx_match.group(1)
+            parts = pkg.split("/")
+            last_part = parts[-1] if parts else pkg
+            has_version = "@" in last_part and not last_part.startswith("@")
+            if not has_version:
+                findings.append(MCPFinding(
+                    code="MCP-007",
+                    title="Unpinned bunx package",
+                    description=f"MCP server '{name}' installs '{pkg}' via bunx without version pinning.",
+                    severity="high",
+                    remediation=f"Pin the version: bunx {pkg}@<version>",
+                ))
+
+        # deno run without version pin (--import-map or @version)
+        if re.search(r"deno\s+run", all_str):
+            deno_pkg = re.search(r"deno\s+run\s+(?:--allow-\S+\s+)*(\S+)", all_str)
+            if deno_pkg:
+                pkg = deno_pkg.group(1)
+                if "@" not in pkg.split("/")[-1] and not pkg.startswith(".") and not pkg.startswith("/"):
+                    findings.append(MCPFinding(
+                        code="MCP-007",
+                        title="Unpinned deno module",
+                        description=f"MCP server '{name}' runs '{pkg}' via deno without version pinning.",
+                        severity="high",
+                        remediation=f"Pin the version in the import URL or use --lock flag.",
+                    ))
+
+        # docker run with :latest or no tag
+        docker_match = re.search(r"docker\s+run\s+(?:-[^\s]+\s+)*([a-zA-Z0-9_./-]+(?::[^\s]+)?)", all_str)
+        if docker_match:
+            image = docker_match.group(1)
+            if ":" not in image or image.endswith(":latest"):
+                findings.append(MCPFinding(
+                    code="MCP-007",
+                    title="Unpinned Docker image",
+                    description=f"MCP server '{name}' uses Docker image '{image}' without a specific tag. "
+                                f"The image could be replaced with a malicious version.",
+                    severity="high",
+                    remediation=f"Pin the image to a specific digest: docker run {image}@sha256:<digest>",
+                ))
+
+        # pip install without ==version
+        pip_match = re.search(r"pip3?\s+install\s+([a-zA-Z0-9_.-]+)", all_str)
+        if pip_match:
+            pkg = pip_match.group(1)
+            if "==" not in all_str.split(pkg)[-1][:20] and pkg not in ("-e", "-r", "--upgrade"):
+                findings.append(MCPFinding(
+                    code="MCP-007",
+                    title="Unpinned pip package",
+                    description=f"MCP server '{name}' installs '{pkg}' via pip without version pinning.",
+                    severity="high",
+                    remediation=f"Pin the version: pip install {pkg}==<version>",
+                ))
+
+        # go run without @version
+        go_match = re.search(r"go\s+run\s+([a-zA-Z0-9_./-]+)", all_str)
+        if go_match:
+            pkg = go_match.group(1)
+            if "@" not in pkg and not pkg.startswith(".") and not pkg.startswith("/"):
+                findings.append(MCPFinding(
+                    code="MCP-007",
+                    title="Unpinned Go module",
+                    description=f"MCP server '{name}' runs '{pkg}' via go run without version pinning.",
+                    severity="high",
+                    remediation=f"Pin the version: go run {pkg}@<version>",
                 ))
 
         # Known malicious packages
