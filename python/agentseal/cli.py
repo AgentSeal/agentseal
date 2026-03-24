@@ -1312,6 +1312,19 @@ def _run_guard(args):
             print(f"  {Y}{_col(name, W1)}{RST}  {_col(ctype, 16)}  {change.detail}")
         print()
 
+    # ── Unlisted (project config) ──
+    if report.unlisted_findings:
+        n_unlisted = len(report.unlisted_findings)
+        print(SEP)
+        print(f"  {B}POLICY{RST}{' ' * (W - 6 - len(str(n_unlisted)) - 9)}{D}{n_unlisted} unlisted{RST}")
+        print(SEP)
+        print(f"  {D}{_col('ITEM', W1)}  {_col('TYPE', W2)}  FINDING{RST}")
+        for uf in report.unlisted_findings:
+            name = uf.item_name[:W1]
+            v_str = _verdict(GuardVerdict.WARNING)
+            print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {uf.description}")
+        print()
+
     # ── Summary ──
     print(SEP)
 

@@ -452,6 +452,17 @@ class GuardReport:
                     result["fingerprints"] = {"evidence": f.evidence[:200]}
                 results.append(result)
 
+        # Unlisted findings
+        for uf in self.unlisted_findings:
+            rule_idx = _ensure_rule(uf.code, uf.title)
+            result = {
+                "ruleId": uf.code,
+                "ruleIndex": rule_idx,
+                "level": "warning",
+                "message": {"text": uf.description},
+            }
+            results.append(result)
+
         from agentseal import __version__
         return {
             "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
