@@ -632,7 +632,8 @@ def scan_machine() -> tuple[
     seen_servers: set[tuple[str, str]] = set()
     unique_servers: list[dict] = []
     for srv in all_mcp_servers:
-        identifier = srv.get("command", "") or srv.get("url", "")
+        cmd = srv.get("command", "") or srv.get("url", "")
+        identifier = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
         key = (srv.get("name", ""), identifier)
         if key not in seen_servers:
             seen_servers.add(key)

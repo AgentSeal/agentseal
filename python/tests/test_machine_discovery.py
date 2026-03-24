@@ -165,6 +165,24 @@ class TestScanMachine:
 
         assert agents[0].status == "error"
 
+    def test_dedup_with_list_command(self, tmp_path):
+        """MCP server with command as list (not string) must not crash dedup."""
+        cfg = tmp_path / "config.json"
+        cfg.write_text(json.dumps({"mcpServers": {
+            "myserver": {"command": ["npx", "-y", "@example/server"], "args": []},
+        }}))
+
+        mock_configs = [
+            {"name": "Agent1", "agent_type": "a1", "paths": {"all": cfg}, "mcp_key": "mcpServers"},
+        ]
+
+        with patch("agentseal.machine_discovery._get_well_known_configs", return_value=mock_configs):
+            with patch("agentseal.machine_discovery._home", return_value=tmp_path):
+                agents, servers, skills = scan_machine()
+
+        assert len(servers) == 1
+        assert servers[0]["name"] == "myserver"
+
     def test_deduplicates_mcp_servers(self, tmp_path):
         """Same MCP server in two configs should be deduplicated."""
         cfg1 = tmp_path / "config1.json"
