@@ -432,6 +432,22 @@ def main():
         "--no-diff", action="store_true",
         help="Suppress delta comparison against previous scan",
     )
+    guard_parser.add_argument(
+        "--no-registry", action="store_true",
+        help="Skip MCP registry trust score enrichment (offline mode)",
+    )
+    guard_parser.add_argument(
+        "--from-json", type=str, default=None, metavar="FILE",
+        help="Load a saved JSON report and re-render (no re-scan)",
+    )
+    guard_parser.add_argument(
+        "--fail-on", type=str, default=None, choices=["danger", "warning", "safe"],
+        help="Verdict threshold for non-zero exit (overrides .agentseal.yaml)",
+    )
+    guard_parser.add_argument(
+        "--rules", type=str, default=None, metavar="PATH",
+        help="Path to custom rules YAML file or directory (for guard test)",
+    )
 
     # ── scan-mcp command ─────────────────────────────────────────────
     scanmcp_parser = subparsers.add_parser(
@@ -662,6 +678,9 @@ def _count_severities(report) -> dict[str, int]:
         for f in rr.findings:
             if f.severity in counts:
                 counts[f.severity] += 1
+    for cf in getattr(report, "custom_findings", []):
+        if cf.severity in counts:
+            counts[cf.severity] += 1
     return counts
 
 
@@ -968,6 +987,88 @@ def _run_guard(args):
         sys.exit(0 if success else 1)
         return
 
+    # Handle "guard test" subcommand
+    if scan_path == "test":
+        from agentseal.rules import RuleEngine
+        rules_path = getattr(args, "rules", None)
+        rule_paths = []
+        if rules_path:
+            rule_paths = [rules_path]
+        else:
+            default_dir = Path.cwd() / ".agentseal" / "rules"
+            if default_dir.is_dir():
+                rule_paths = [str(default_dir)]
+        if not rule_paths:
+            print("No rules found. Create .agentseal/rules/*.yaml or use --rules")
+            sys.exit(1)
+            return
+        try:
+            engine = RuleEngine.from_paths(rule_paths)
+        except ValueError as e:
+            print(f"Rule error: {e}", file=sys.stderr)
+            sys.exit(1)
+            return
+        results = engine.run_tests()
+        if not results:
+            print("No inline tests found in rules.")
+            sys.exit(0)
+            return
+        W = 62
+        SEP = f"  \033[90m{'-' * W}\033[0m"
+        n_rules = len(set(r.rule_id for r in results))
+        n_tests = len(results)
+        print()
+        print(SEP)
+        print(f"  \033[1mRULE TESTS\033[0m{' ' * (W - 10 - len(str(n_rules)) - len(str(n_tests)) - 16)}\033[90m{n_rules} rules, {n_tests} tests\033[0m")
+        print(SEP)
+        passed = 0
+        failed = 0
+        for r in results:
+            dots = "." * max(1, 50 - len(r.rule_id) - len(r.test_name))
+            if r.passed:
+                print(f"  {r.rule_id}  {r.test_name} {dots} \033[92mPASS\033[0m")
+                passed += 1
+            else:
+                print(f"  {r.rule_id}  {r.test_name} {dots} \033[91mFAIL\033[0m")
+                print(f"            Expected: {r.expected}, Got: {r.actual}")
+                failed += 1
+        print()
+        print(f"  {passed} passed, {failed} failed")
+        print()
+        sys.exit(1 if failed > 0 else 0)
+        return
+
+    # Handle --from-json (re-render saved report, no re-scan)
+    from_json_path = getattr(args, "from_json", None)
+    if from_json_path:
+        from agentseal.guard_models import GuardReport as _GR
+        try:
+            raw = json.loads(Path(from_json_path).read_text(encoding="utf-8"))
+            report = _GR.from_dict(raw)
+        except Exception as e:
+            print(f"Error loading {from_json_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+            return
+        output_fmt = getattr(args, "output", "terminal")
+        if output_fmt == "json":
+            print(json.dumps(raw, indent=2))
+        elif output_fmt == "sarif":
+            sarif_json = json.dumps(report.to_sarif(), indent=2)
+            print(sarif_json)
+            if getattr(args, "save", None):
+                Path(args.save).write_text(sarif_json, encoding="utf-8")
+        elif output_fmt == "html":
+            html = _guard_to_html(report)
+            print(html)
+            if getattr(args, "save", None):
+                Path(args.save).write_text(html, encoding="utf-8")
+        else:
+            # Fall through to terminal rendering below
+            pass
+        if output_fmt != "terminal":
+            sys.exit(0)
+            return
+
     R = "\033[91m"     # Red
     Y = "\033[93m"     # Yellow
     G = "\033[92m"     # Green
@@ -1089,6 +1190,67 @@ def _run_guard(args):
                 if not should_ignore_finding(project_config, f.code, mr.source_file)
             ]
 
+    # ── Custom rules evaluation ──────────────────────────────────
+    try:
+        from agentseal.rules import RuleEngine
+        rule_paths = []
+        rules_arg = getattr(args, "rules", None)
+        if rules_arg:
+            rule_paths = [rules_arg]
+        elif project_config and hasattr(project_config, "rules_paths") and project_config.rules_paths:
+            rule_paths = project_config.rules_paths
+        else:
+            default_dir = Path.cwd() / ".agentseal" / "rules"
+            if default_dir.is_dir():
+                rule_paths = [str(default_dir)]
+        if rule_paths:
+            engine = RuleEngine.from_paths(rule_paths)
+            # Get raw MCP configs for rule matching
+            from agentseal.machine_discovery import scan_machine, scan_directory
+            if scan_path:
+                _, raw_mcps, _ = scan_directory(Path(scan_path))
+            else:
+                _, raw_mcps, _ = scan_machine()
+            raw_mcp_map = {s.get("name", ""): s for s in raw_mcps}
+            for mr in report.mcp_results:
+                raw = raw_mcp_map.get(mr.name, {"name": mr.name, "command": mr.command})
+                report.custom_findings.extend(engine.evaluate_mcp(mr, raw))
+            for sr in report.skill_results:
+                try:
+                    content = Path(sr.path).read_text(encoding="utf-8", errors="replace")[:10240]
+                except Exception:
+                    content = ""
+                report.custom_findings.extend(engine.evaluate_skill(sr, content))
+            for agent in report.agents_found:
+                report.custom_findings.extend(engine.evaluate_agent(agent))
+            # Apply ignore_findings to custom findings too
+            if project_config:
+                report.custom_findings = [
+                    c for c in report.custom_findings
+                    if not should_ignore_finding(project_config, c.code)
+                ]
+            if report.custom_findings and not structured_output:
+                on_progress("rules", f"{len(report.custom_findings)} custom rule match(es)")
+    except Exception as e:
+        if not structured_output:
+            import traceback
+            on_progress("rules", f"Custom rules: {e}")
+
+    # ── Registry enrichment ──────────────────────────────────────
+    if not getattr(args, "no_registry", False) and report.mcp_results:
+        try:
+            from agentseal.registry_client import enrich_mcp_results
+            api_key_env = os.environ.get("AGENTSEAL_API_KEY")
+            if not structured_output:
+                print(f"  {D}Checking registry...{RST}", end="", flush=True)
+            enrich_mcp_results(report.mcp_results, api_key=api_key_env)
+            if not structured_output:
+                enriched = sum(1 for m in report.mcp_results if m.registry_score is not None)
+                print(f"\r  {D}Registry: {enriched}/{len(report.mcp_results)} matched{RST}")
+        except Exception:
+            if not structured_output:
+                print(f"\r  {D}Registry: skipped{RST}")
+
     # ── History: compute delta ───────────────────────────────────
     delta = None
     if not getattr(args, "no_diff", False) and _hist_store:
@@ -1117,12 +1279,16 @@ def _run_guard(args):
                 print(f"  {D}History: {e}{RST}", file=sys.stderr)
 
     def _exit_code():
-        if project_config:
+        # CLI --fail-on overrides project config
+        fail_on = getattr(args, "fail_on", None)
+        if fail_on is None and project_config:
+            fail_on = project_config.fail_on
+        if fail_on:
             has_error = any(
                 s.verdict == GuardVerdict.ERROR for s in report.skill_results
             )
             return 1 if should_fail(
-                project_config.fail_on,
+                fail_on,
                 has_danger=report.total_dangers > 0 or has_error,
                 has_warning=report.total_warnings > 0,
                 has_safe=report.total_safe > 0,
@@ -1278,34 +1444,32 @@ def _run_guard(args):
         print(SEP)
         print(f"  {B}MCP SERVERS{RST}{' ' * (W - 11 - len(str(n_mcp)) - 8)}{D}{n_mcp} scanned{RST}")
         print(SEP)
-        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  FINDING{RST}")
-        try:
-            from agentseal.mcp_registry import MCPRegistry
-            _registry = MCPRegistry()
-        except Exception:
-            _registry = None
+        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('REGISTRY', 14)}  FINDING{RST}")
         for mr in report.mcp_results:
             name = mr.name[:W1]
-            reg_info = _registry.lookup(mr.name) if _registry else None
-            risk_tag = ""
-            if reg_info and reg_info.risk_level in ("critical", "high"):
-                rl = reg_info.risk_level
-                rl_color = R if rl == "critical" else Y
-                risk_tag = f" {rl_color}({rl} risk){RST}"
+
+            # Registry trust score display
+            if mr.registry_score is not None:
+                rs = mr.registry_score
+                rl = mr.registry_level or "?"
+                if rl in ("EXCELLENT", "HIGH"):
+                    reg_str = f"{G}{int(rs)} {rl}{RST}"
+                elif rl == "MEDIUM":
+                    reg_str = f"{Y}{int(rs)} {rl}{RST}"
+                else:
+                    reg_str = f"{R}{int(rs)} {rl}{RST}"
+            else:
+                reg_str = f"{D}\u2014{RST}"
 
             if mr.verdict in (GuardVerdict.DANGER, GuardVerdict.WARNING):
                 top = mr.top_finding
-                desc = (top.title if top else "Issue") + risk_tag
-                print(f"  {_col(name, W1)}  {_col(_verdict(mr.verdict), W2)}  {desc}")
+                desc = top.title if top else "Issue"
+                print(f"  {_col(name, W1)}  {_col(_verdict(mr.verdict), W2)}  {_col(reg_str, 14)}  {desc}")
                 if top:
-                    print(f"  {'':<{W1}}  {C}fix: {top.remediation}{RST}")
+                    print(f"  {'':<{W1}}  {' ' * 14}  {C}fix: {top.remediation}{RST}")
             else:
                 v_str = _verdict(mr.verdict, "OK")
-                if reg_info and reg_info.risk_level in ("critical", "high"):
-                    print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {G}config ok{RST}{risk_tag}")
-                    print(f"  {'':<{W1}}  {D}{reg_info.category} | {reg_info.description}{RST}")
-                else:
-                    print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {G}clean{RST}{risk_tag}")
+                print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {_col(reg_str, 14)}  {G}clean{RST}")
         print()
 
     # ── MCP Runtime ──
@@ -1368,6 +1532,21 @@ def _run_guard(args):
             name = uf.item_name[:W1]
             v_str = _verdict(GuardVerdict.WARNING)
             print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {uf.description}")
+        print()
+
+    # ── Custom Rules ──
+    if report.custom_findings:
+        n_custom = len(report.custom_findings)
+        print(SEP)
+        print(f"  {B}CUSTOM RULES{RST}{' ' * (W - 12 - len(str(n_custom)) - 9)}{D}{n_custom} matched{RST}")
+        print(SEP)
+        print(f"  {D}{_col('RULE', 12)}  {_col('ENTITY', W1)}  {_col('VERDICT', W2)}  {_col('SEVERITY', W3)}  FINDING{RST}")
+        for cf in report.custom_findings:
+            entity_label = f"{cf.entity_name} ({cf.entity_type[:2]})"[:W1]
+            v_str = _verdict(GuardVerdict.DANGER if cf.verdict == "danger" else GuardVerdict.WARNING)
+            print(f"  {_col(cf.code, 12)}  {_col(entity_label, W1)}  {_col(v_str, W2)}  {_col(_sev(cf.severity), W3)}  {cf.title}")
+            if cf.remediation:
+                print(f"  {'':<12}  {'':<{W1}}  {C}fix: {cf.remediation}{RST}")
         print()
 
     # ── Summary ──
