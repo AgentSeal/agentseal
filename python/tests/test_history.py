@@ -1,7 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
-from agentseal.guard_models import GuardReport
-from agentseal.history import HistoryStore
+from agentseal.guard_models import (
+    AgentConfigResult,
+    GuardReport,
+    GuardVerdict,
+    MCPServerResult,
+    SkillFinding,
+    SkillResult,
+)
+from agentseal.history import HistoryStore, compute_delta, normalize_skill_path
 
 
 class TestHistoryStore:
@@ -84,3 +91,133 @@ class TestHistoryStore:
                    scan_path=str(tmp_path / "project"))
         prev = store.load_previous(scan_path=str(tmp_path / "project"))
         assert prev is not None
+
+
+class TestNormalizeSkillPath:
+    def test_home_prefix(self):
+        import os
+        home = os.path.expanduser("~")
+        result = normalize_skill_path(f"{home}/projects/CLAUDE.md", scan_path=None)
+        assert result == "~/projects/CLAUDE.md"
+
+    def test_relative_to_scan_root(self):
+        result = normalize_skill_path("/a/b/c/CLAUDE.md", scan_path="/a/b")
+        assert result == "c/CLAUDE.md"
+
+    def test_fallback_last_two_segments(self):
+        result = normalize_skill_path("/unrelated/deep/path/sub/file.md", scan_path="/other")
+        assert result == "sub/file.md"
+
+    def test_single_segment(self):
+        result = normalize_skill_path("/CLAUDE.md", scan_path=None)
+        assert result == "CLAUDE.md"
+
+
+class TestComputeDelta:
+    def _report(self, ts, skills=None, mcps=None, agents=None):
+        return GuardReport(
+            timestamp=ts, duration_seconds=1.0,
+            agents_found=agents or [],
+            skill_results=skills or [],
+            mcp_results=mcps or [],
+        )
+
+    def test_new_finding(self):
+        prev = self._report("T1", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.SAFE),
+        ])
+        curr = self._report("T2", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.WARNING,
+                [SkillFinding("SKILL-001", "Cred theft", "D", "high", "E", "R")]),
+        ])
+        delta = compute_delta(curr, prev)
+        assert delta.total_new == 1
+        assert delta.entries[0].code == "SKILL-001"
+        assert delta.entries[0].change_type == "new"
+
+    def test_resolved_finding(self):
+        prev = self._report("T1", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.WARNING,
+                [SkillFinding("SKILL-001", "T", "D", "high", "E", "R")]),
+        ])
+        curr = self._report("T2", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.SAFE),
+        ])
+        delta = compute_delta(curr, prev)
+        assert delta.total_resolved == 1
+        assert delta.entries[0].change_type == "resolved"
+
+    def test_verdict_changed(self):
+        prev = self._report("T1", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.WARNING),
+        ])
+        curr = self._report("T2", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.DANGER),
+        ])
+        delta = compute_delta(curr, prev)
+        assert delta.total_changed == 1
+        assert delta.entries[0].old_verdict == "warning"
+        assert delta.entries[0].new_verdict == "danger"
+
+    def test_new_entity(self):
+        prev = self._report("T1")
+        curr = self._report("T2", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.SAFE),
+        ])
+        delta = compute_delta(curr, prev)
+        assert delta.total_new == 1
+        assert delta.entries[0].change_type == "new_entity"
+
+    def test_removed_entity(self):
+        prev = self._report("T1", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.SAFE),
+        ])
+        curr = self._report("T2")
+        delta = compute_delta(curr, prev)
+        assert delta.total_resolved == 1
+        assert delta.entries[0].change_type == "removed_entity"
+
+    def test_new_agent(self):
+        prev = self._report("T1")
+        curr = self._report("T2", agents=[
+            AgentConfigResult("Cursor", "/f", "cursor", 1, 0, "found"),
+        ])
+        delta = compute_delta(curr, prev)
+        assert delta.total_new == 1
+        assert delta.entries[0].entity_type == "agent"
+        assert delta.entries[0].change_type == "new_entity"
+
+    def test_removed_agent(self):
+        prev = self._report("T1", agents=[
+            AgentConfigResult("Cursor", "/f", "cursor", 1, 0, "found"),
+        ])
+        curr = self._report("T2")
+        delta = compute_delta(curr, prev)
+        assert delta.total_resolved == 1
+        assert delta.entries[0].entity_type == "agent"
+
+    def test_mcp_matched_by_name_and_source(self):
+        prev = self._report("T1", mcps=[
+            MCPServerResult("filesystem", "npx old", "/f/mcp.json", GuardVerdict.SAFE),
+        ])
+        curr = self._report("T2", mcps=[
+            MCPServerResult("filesystem", "npx new", "/f/mcp.json", GuardVerdict.SAFE),
+        ])
+        delta = compute_delta(curr, prev)
+        # Same name+source_file = same entity, no delta
+        assert len(delta.entries) == 0
+
+    def test_no_changes(self):
+        r = self._report("T1", skills=[
+            SkillResult("CLAUDE.md", "~/CLAUDE.md", GuardVerdict.SAFE),
+        ])
+        delta = compute_delta(r, r)
+        assert len(delta.entries) == 0
+
+    def test_not_installed_agents_skipped(self):
+        prev = self._report("T1")
+        curr = self._report("T2", agents=[
+            AgentConfigResult("W", "/f", "windsurf", 0, 0, "not_installed"),
+        ])
+        delta = compute_delta(curr, prev)
+        assert len(delta.entries) == 0
