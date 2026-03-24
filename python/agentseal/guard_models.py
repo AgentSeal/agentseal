@@ -258,6 +258,31 @@ class BaselineChangeResult:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# UNLISTED (PROJECT CONFIG ALLOWLIST) MODELS
+# ═══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class UnlistedFinding:
+    """A finding for an agent or MCP server not in the project allowlist."""
+    code: str               # "GUARD-001" (agent) or "GUARD-002" (server)
+    title: str
+    description: str
+    severity: str = "medium"
+    item_name: str = ""     # agent_type or server name
+    item_type: str = ""     # "agent" or "mcp_server"
+
+    def to_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+            "item_name": self.item_name,
+            "item_type": self.item_type,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # GUARD REPORT (top-level result)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -273,6 +298,8 @@ class GuardReport:
     toxic_flows: list[ToxicFlowResult] = field(default_factory=list)
     baseline_changes: list[BaselineChangeResult] = field(default_factory=list)
     llm_tokens_used: int = 0
+    unlisted_findings: list[UnlistedFinding] = field(default_factory=list)
+    config_path: str = ""
 
     @property
     def total_dangers(self) -> int:
@@ -286,7 +313,7 @@ class GuardReport:
         skills = sum(1 for s in self.skill_results if s.verdict == GuardVerdict.WARNING)
         mcp = sum(1 for m in self.mcp_results if m.verdict == GuardVerdict.WARNING)
         runtime = sum(1 for r in self.mcp_runtime_results if r.verdict == GuardVerdict.WARNING)
-        return skills + mcp + runtime
+        return skills + mcp + runtime + len(self.unlisted_findings)
 
     @property
     def total_safe(self) -> int:
@@ -346,6 +373,9 @@ class GuardReport:
             d["baseline_changes"] = [c.to_dict() for c in self.baseline_changes]
         if self.llm_tokens_used > 0:
             d["llm_tokens_used"] = self.llm_tokens_used
+        if self.unlisted_findings:
+            d["unlisted_findings"] = [f.to_dict() for f in self.unlisted_findings]
+        d["config_path"] = self.config_path or None
         return d
 
     def to_json(self, indent: int = 2) -> str:

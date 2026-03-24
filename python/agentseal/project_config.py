@@ -12,6 +12,7 @@ from typing import Optional
 
 import yaml
 
+from agentseal.guard_models import AgentConfigResult, UnlistedFinding
 
 _CONFIG_FILENAME = ".agentseal.yaml"
 
@@ -145,3 +146,59 @@ def resolve_project_config(
         current = parent
 
     return None
+
+
+def generate_unlisted_findings(
+    config: ProjectConfig,
+    agents: list[AgentConfigResult],
+    mcp_servers: list[dict],
+) -> list[UnlistedFinding]:
+    """Generate UNLISTED findings for agents/servers not in allowlists.
+
+    Empty allowlists disable checks (opt-in feature).
+    """
+    findings: list[UnlistedFinding] = []
+
+    # Agent checks (only if allowlist is non-empty)
+    if config.allowed_agents:
+        allowed = set(config.allowed_agents)
+        for agent in agents:
+            if agent.status in ("not_installed", "error"):
+                continue
+            if agent.agent_type not in allowed:
+                findings.append(UnlistedFinding(
+                    code="GUARD-001",
+                    title="Unlisted agent",
+                    description=f"Agent '{agent.agent_type}' is not in allowed_agents",
+                    item_name=agent.agent_type,
+                    item_type="agent",
+                ))
+
+    # MCP server checks (only if allowlist is non-empty)
+    if config.allowed_mcp_servers:
+        # Parse allowlist: "name@agent" -> (name, agent), "name" -> (name, None)
+        allowed_set: set[tuple[str, str | None]] = set()
+        for entry in config.allowed_mcp_servers:
+            if "@" in entry:
+                name, agent = entry.rsplit("@", 1)
+                allowed_set.add((name, agent))
+            else:
+                allowed_set.add((entry, None))
+
+        for srv in mcp_servers:
+            srv_name = srv.get("name", "")
+            srv_agent = srv.get("agent_type", "")
+            # Match: exact (name, agent) or bare name (name, None)
+            if (srv_name, srv_agent) in allowed_set:
+                continue
+            if (srv_name, None) in allowed_set:
+                continue
+            findings.append(UnlistedFinding(
+                code="GUARD-002",
+                title="Unlisted MCP server",
+                description=f"MCP server '{srv_name}' ({srv_agent}) is not in allowed_mcp_servers",
+                item_name=srv_name,
+                item_type="mcp_server",
+            ))
+
+    return findings

@@ -1,8 +1,13 @@
+
 import pytest
 import yaml
-from pathlib import Path
-
-from agentseal.project_config import ProjectConfig, load_project_config, resolve_project_config
+from agentseal.guard_models import AgentConfigResult
+from agentseal.project_config import (
+    ProjectConfig,
+    generate_unlisted_findings,
+    load_project_config,
+    resolve_project_config,
+)
 
 
 class TestLoadProjectConfig:
@@ -133,3 +138,64 @@ class TestResolveProjectConfig:
         (tmp_path / ".git").mkdir()
         cfg = resolve_project_config(search_dir=tmp_path)
         assert cfg is None
+
+
+class TestUnlistedFindings:
+    def _agent(self, name, agent_type, status="found"):
+        return AgentConfigResult(
+            name=name, config_path="/fake", agent_type=agent_type,
+            mcp_servers=0, skills_count=0, status=status,
+        )
+
+    def _mcp(self, name, agent_type="claude-desktop"):
+        return {"name": name, "agent_type": agent_type, "command": "node"}
+
+    def test_empty_allowlist_no_findings(self):
+        cfg = ProjectConfig(allowed_agents=[], allowed_mcp_servers=[])
+        agents = [self._agent("Claude Desktop", "claude-desktop")]
+        mcps = [self._mcp("filesystem")]
+        findings = generate_unlisted_findings(cfg, agents, mcps)
+        assert findings == []
+
+    def test_unlisted_agent(self):
+        cfg = ProjectConfig(allowed_agents=["cursor"])
+        agents = [
+            self._agent("Cursor", "cursor"),
+            self._agent("Claude Desktop", "claude-desktop"),
+        ]
+        findings = generate_unlisted_findings(cfg, agents, [])
+        assert len(findings) == 1
+        assert findings[0].code == "GUARD-001"
+        assert "claude-desktop" in findings[0].description
+
+    def test_allowed_agent_no_finding(self):
+        cfg = ProjectConfig(allowed_agents=["claude-desktop"])
+        agents = [self._agent("Claude Desktop", "claude-desktop")]
+        findings = generate_unlisted_findings(cfg, agents, [])
+        assert findings == []
+
+    def test_unlisted_mcp_with_agent_type(self):
+        cfg = ProjectConfig(allowed_mcp_servers=["filesystem@claude-desktop"])
+        mcps = [
+            self._mcp("filesystem", "claude-desktop"),
+            self._mcp("slack", "cursor"),
+        ]
+        findings = generate_unlisted_findings(cfg, [], mcps)
+        assert len(findings) == 1
+        assert findings[0].code == "GUARD-002"
+        assert "slack" in findings[0].description
+
+    def test_unlisted_mcp_bare_name_matches_any_agent(self):
+        cfg = ProjectConfig(allowed_mcp_servers=["filesystem"])
+        mcps = [
+            self._mcp("filesystem", "claude-desktop"),
+            self._mcp("filesystem", "cursor"),
+        ]
+        findings = generate_unlisted_findings(cfg, [], mcps)
+        assert findings == []
+
+    def test_not_installed_agents_skipped(self):
+        cfg = ProjectConfig(allowed_agents=["cursor"])
+        agents = [self._agent("Windsurf", "windsurf", status="not_installed")]
+        findings = generate_unlisted_findings(cfg, agents, [])
+        assert findings == []
