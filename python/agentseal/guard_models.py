@@ -140,6 +140,9 @@ class MCPServerResult:
     source_file: str
     verdict: GuardVerdict
     findings: list[MCPFinding] = field(default_factory=list)
+    registry_score: Optional[float] = None
+    registry_level: Optional[str] = None          # EXCELLENT|HIGH|MEDIUM|LOW|CRITICAL
+    registry_findings_count: Optional[int] = None
 
     @property
     def top_finding(self) -> Optional[MCPFinding]:
@@ -148,22 +151,33 @@ class MCPServerResult:
         return min(self.findings, key=lambda f: SEVERITY_ORDER.get(f.severity, 99))
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "command": self.command,
             "source_file": self.source_file,
             "verdict": self.verdict.value,
             "findings": [f.to_dict() for f in self.findings],
         }
+        if self.registry_score is not None:
+            d["registry"] = {
+                "score": self.registry_score,
+                "level": self.registry_level,
+                "findings_count": self.registry_findings_count,
+            }
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "MCPServerResult":
+        reg = d.get("registry") or {}
         return cls(
             name=d.get("name", ""),
             command=d.get("command", ""),
             source_file=d.get("source_file", ""),
             verdict=GuardVerdict(d.get("verdict", "safe")),
             findings=[MCPFinding.from_dict(f) for f in d.get("findings", [])],
+            registry_score=reg.get("score"),
+            registry_level=reg.get("level"),
+            registry_findings_count=reg.get("findings_count"),
         )
 
 
@@ -335,6 +349,44 @@ class UnlistedFinding:
         }
 
 
+@dataclass
+class CustomFinding:
+    """Finding from a user-defined YAML rule."""
+    code: str              # CUSTOM-001
+    title: str
+    severity: str          # critical|high|medium|low
+    verdict: str           # danger|warning
+    remediation: str
+    rule_file: str         # path to rule YAML that matched
+    entity_type: str       # mcp|skill|agent
+    entity_name: str       # name of matched entity
+
+    def to_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "title": self.title,
+            "severity": self.severity,
+            "verdict": self.verdict,
+            "remediation": self.remediation,
+            "rule_file": self.rule_file,
+            "entity_type": self.entity_type,
+            "entity_name": self.entity_name,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "CustomFinding":
+        return cls(
+            code=d.get("code", ""),
+            title=d.get("title", ""),
+            severity=d.get("severity", ""),
+            verdict=d.get("verdict", ""),
+            remediation=d.get("remediation", ""),
+            rule_file=d.get("rule_file", ""),
+            entity_type=d.get("entity_type", ""),
+            entity_name=d.get("entity_name", ""),
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # DELTA (SCAN HISTORY DIFF) MODELS
 # ═══════════════════════════════════════════════════════════════════════
@@ -415,6 +467,7 @@ class GuardReport:
     baseline_changes: list[BaselineChangeResult] = field(default_factory=list)
     llm_tokens_used: int = 0
     unlisted_findings: list[UnlistedFinding] = field(default_factory=list)
+    custom_findings: list[CustomFinding] = field(default_factory=list)
     config_path: str = ""
 
     @property
@@ -422,14 +475,16 @@ class GuardReport:
         skills = sum(1 for s in self.skill_results if s.verdict == GuardVerdict.DANGER)
         mcp = sum(1 for m in self.mcp_results if m.verdict == GuardVerdict.DANGER)
         runtime = sum(1 for r in self.mcp_runtime_results if r.verdict == GuardVerdict.DANGER)
-        return skills + mcp + runtime
+        custom = sum(1 for c in self.custom_findings if c.verdict == "danger")
+        return skills + mcp + runtime + custom
 
     @property
     def total_warnings(self) -> int:
         skills = sum(1 for s in self.skill_results if s.verdict == GuardVerdict.WARNING)
         mcp = sum(1 for m in self.mcp_results if m.verdict == GuardVerdict.WARNING)
         runtime = sum(1 for r in self.mcp_runtime_results if r.verdict == GuardVerdict.WARNING)
-        return skills + mcp + runtime + len(self.unlisted_findings)
+        custom = sum(1 for c in self.custom_findings if c.verdict == "warning")
+        return skills + mcp + runtime + len(self.unlisted_findings) + custom
 
     @property
     def total_safe(self) -> int:
@@ -445,7 +500,7 @@ class GuardReport:
     @property
     def all_actions(self) -> list[str]:
         """Collect all remediation actions, sorted by severity."""
-        all_findings: list[tuple[str, SkillFinding | MCPFinding | MCPRuntimeFinding]] = []
+        all_findings: list[tuple[str, SkillFinding | MCPFinding | MCPRuntimeFinding | CustomFinding]] = []
         for s in self.skill_results:
             for f in s.findings:
                 all_findings.append((s.name, f))
@@ -455,6 +510,8 @@ class GuardReport:
         for r in self.mcp_runtime_results:
             for f in r.findings:
                 all_findings.append((r.server_name, f))
+        for c in self.custom_findings:
+            all_findings.append((c.entity_name, c))
 
         all_findings.sort(key=lambda x: SEVERITY_ORDER.get(x[1].severity, 99))
 
@@ -491,6 +548,8 @@ class GuardReport:
             d["llm_tokens_used"] = self.llm_tokens_used
         if self.unlisted_findings:
             d["unlisted_findings"] = [f.to_dict() for f in self.unlisted_findings]
+        if self.custom_findings:
+            d["custom_findings"] = [f.to_dict() for f in self.custom_findings]
         d["config_path"] = self.config_path or None
         return d
 
@@ -507,6 +566,7 @@ class GuardReport:
             baseline_changes=[],
             llm_tokens_used=d.get("llm_tokens_used", 0),
             unlisted_findings=[],
+            custom_findings=[CustomFinding.from_dict(f) for f in d.get("custom_findings", [])],
             config_path=d.get("config_path") or "",
         )
 
@@ -592,6 +652,17 @@ class GuardReport:
                 "ruleIndex": rule_idx,
                 "level": "warning",
                 "message": {"text": uf.description},
+            }
+            results.append(result)
+
+        # Custom rule findings
+        for cf in self.custom_findings:
+            rule_idx = _ensure_rule(cf.code, cf.title)
+            result = {
+                "ruleId": cf.code,
+                "ruleIndex": rule_idx,
+                "level": _severity_to_level(cf.severity),
+                "message": {"text": f"{cf.title} ({cf.entity_type}: {cf.entity_name})"},
             }
             results.append(result)
 
