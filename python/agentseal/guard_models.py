@@ -336,6 +336,69 @@ class UnlistedFinding:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# DELTA (SCAN HISTORY DIFF) MODELS
+# ═══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class DeltaEntry:
+    """A single change between two guard scans."""
+    change_type: str        # "new", "resolved", "changed", "new_entity", "removed_entity"
+    entity_type: str        # "skill", "mcp", "agent"
+    entity_name: str        # normalized skill path, server name, or agent type
+    code: str = ""          # finding code (empty for entity-level changes)
+    title: str = ""         # finding title or entity description
+    old_verdict: str = ""   # for "changed" type
+    new_verdict: str = ""   # for "changed" type
+    severity: str = ""      # finding severity (empty for entity-level changes)
+
+    def to_dict(self) -> dict:
+        d = {
+            "change_type": self.change_type,
+            "entity_type": self.entity_type,
+            "entity_name": self.entity_name,
+        }
+        if self.code:
+            d["code"] = self.code
+        if self.title:
+            d["title"] = self.title
+        if self.old_verdict:
+            d["old_verdict"] = self.old_verdict
+        if self.new_verdict:
+            d["new_verdict"] = self.new_verdict
+        if self.severity:
+            d["severity"] = self.severity
+        return d
+
+
+@dataclass
+class DeltaResult:
+    """Result of comparing two guard scans."""
+    previous_timestamp: str
+    entries: list[DeltaEntry] = field(default_factory=list)
+
+    @property
+    def total_new(self) -> int:
+        return sum(1 for e in self.entries if e.change_type in ("new", "new_entity"))
+
+    @property
+    def total_resolved(self) -> int:
+        return sum(1 for e in self.entries if e.change_type in ("resolved", "removed_entity"))
+
+    @property
+    def total_changed(self) -> int:
+        return sum(1 for e in self.entries if e.change_type == "changed")
+
+    def to_dict(self) -> dict:
+        return {
+            "previous_timestamp": self.previous_timestamp,
+            "entries": [e.to_dict() for e in self.entries],
+            "total_new": self.total_new,
+            "total_resolved": self.total_resolved,
+            "total_changed": self.total_changed,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # GUARD REPORT (top-level result)
 # ═══════════════════════════════════════════════════════════════════════
 
