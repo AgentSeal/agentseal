@@ -428,6 +428,10 @@ def main():
         "--config", type=str, default=None, metavar="FILE",
         help="Path to .agentseal.yaml config file",
     )
+    guard_parser.add_argument(
+        "--no-diff", action="store_true",
+        help="Suppress delta comparison against previous scan",
+    )
 
     # ── scan-mcp command ─────────────────────────────────────────────
     scanmcp_parser = subparsers.add_parser(
@@ -1059,6 +1063,18 @@ def _run_guard(args):
     except Exception:
         pass  # Best-effort save
 
+    # ── History: save raw report (before ignore_findings filtering) ──
+    _hist_scan_path = str(Path(scan_path).resolve()) if scan_path else None
+    _hist_store = None
+    try:
+        from agentseal.history import HistoryStore
+        _hist_store = HistoryStore()
+        _hist_store.save(report, scan_path=_hist_scan_path)
+        _hist_store.prune()
+    except Exception as e:
+        if not structured_output:
+            print(f"  {D}History: {e}{RST}", file=sys.stderr)
+
     # Apply ignore_findings from project config
     if project_config:
         report.config_path = project_config.config_path
@@ -1072,6 +1088,33 @@ def _run_guard(args):
                 f for f in mr.findings
                 if not should_ignore_finding(project_config, f.code, mr.source_file)
             ]
+
+    # ── History: compute delta ───────────────────────────────────
+    delta = None
+    if not getattr(args, "no_diff", False) and _hist_store:
+        try:
+            from agentseal.history import compute_delta
+            prev = _hist_store.load_previous(scan_path=_hist_scan_path)
+            if prev:
+                # Apply same ignore_findings to previous for fair comparison
+                if project_config:
+                    for sr in prev.skill_results:
+                        sr.findings = [
+                            f for f in sr.findings
+                            if not should_ignore_finding(project_config, f.code, sr.path)
+                        ]
+                    for mr in prev.mcp_results:
+                        mr.findings = [
+                            f for f in mr.findings
+                            if not should_ignore_finding(project_config, f.code, mr.source_file)
+                        ]
+                delta = compute_delta(report, prev, scan_path=_hist_scan_path)
+                if not delta.entries:
+                    delta = None  # Don't show empty delta
+            _hist_store.close()
+        except Exception as e:
+            if not structured_output:
+                print(f"  {D}History: {e}{RST}", file=sys.stderr)
 
     def _exit_code():
         if project_config:
@@ -1088,9 +1131,11 @@ def _run_guard(args):
 
     # ── JSON output ────────────────────────────────────────────────
     if json_mode:
-        print(report.to_json())
+        d = json.loads(report.to_json())
+        d["delta"] = delta.to_dict() if delta else None
+        print(json.dumps(d, indent=2))
         if getattr(args, "save", None):
-            Path(args.save).write_text(report.to_json(), encoding="utf-8")
+            Path(args.save).write_text(json.dumps(d, indent=2), encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
         sys.exit(_exit_code())
         return
@@ -1349,6 +1394,40 @@ def _run_guard(args):
         print(f"  {B}STATUS{RST}     {G}No threats detected. Machine looks clean.{RST}")
 
     print(SEP)
+
+    # ── Delta ──
+    if delta:
+        def _verdict_rank(v):
+            return {"safe": 2, "warning": 1, "danger": 0, "error": 0}.get(v, -1)
+
+        print()
+        ts_display = delta.previous_timestamp[:16].replace("T", " ")
+        print(SEP)
+        print(f"  {B}DELTA{RST}{' ' * (W - 5 - len(ts_display) - 4)}{D}vs {ts_display}{RST}")
+        print(SEP)
+        for entry in delta.entries:
+            if entry.change_type in ("new", "new_entity"):
+                sev_color = R if entry.severity in ("critical", "high") else Y
+                prefix = f"  {sev_color}+ NEW{RST}"
+                if entry.code:
+                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
+                else:
+                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+            elif entry.change_type in ("resolved", "removed_entity"):
+                prefix = f"  {G}- RESOLVED{RST}"
+                if entry.code:
+                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
+                else:
+                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+            elif entry.change_type == "changed":
+                upgrade = _verdict_rank(entry.new_verdict) > _verdict_rank(entry.old_verdict)
+                color = G if upgrade else Y
+                prefix = f"  {color}~ CHANGED{RST}"
+                detail = f"{_col(entry.entity_name, W1 + 14)}{entry.old_verdict} -> {entry.new_verdict}"
+            else:
+                continue
+            print(f"{prefix}  {detail}")
+        print()
 
     # Actions
     actions = report.all_actions
