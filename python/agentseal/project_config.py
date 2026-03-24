@@ -148,6 +148,63 @@ def resolve_project_config(
     return None
 
 
+def should_ignore_path(config: ProjectConfig, path: str) -> bool:
+    """Check if a path should be skipped based on ignore_paths.
+
+    Matches by checking if any path segment matches an ignore entry.
+    e.g. "node_modules" matches "foo/node_modules/bar" and "node_modules/pkg".
+    """
+    if not config.ignore_paths:
+        return False
+    # Normalize: strip trailing slashes from ignore entries
+    ignores = [p.rstrip("/") for p in config.ignore_paths]
+    segments = path.split("/")
+    for ignore in ignores:
+        if ignore in segments:
+            return True
+    return False
+
+
+def should_ignore_finding(config: ProjectConfig, code: str, path: str = "") -> bool:
+    """Check if a finding should be suppressed.
+
+    Supports bare code ("SKILL-001" matches all) or code:path
+    ("SKILL-001:./CLAUDE.md" matches only that file).
+    """
+    for entry in config.ignore_findings:
+        if not isinstance(entry, dict):
+            continue
+        entry_id = entry.get("id", "")
+        if ":" in entry_id:
+            entry_code, entry_path = entry_id.split(":", 1)
+            if entry_code == code and entry_path == path:
+                return True
+        else:
+            if entry_id == code:
+                return True
+    return False
+
+
+def should_fail(
+    fail_on: str,
+    *,
+    has_danger: bool = False,
+    has_warning: bool = False,
+    has_safe: bool = False,
+) -> bool:
+    """Determine if guard should exit non-zero based on fail_on threshold.
+
+    ERROR verdicts are treated as danger level.
+    """
+    if fail_on == "danger":
+        return has_danger
+    if fail_on == "warning":
+        return has_danger or has_warning
+    if fail_on == "safe":
+        return has_danger or has_warning or has_safe
+    return has_danger  # fallback
+
+
 def generate_unlisted_findings(
     config: ProjectConfig,
     agents: list[AgentConfigResult],

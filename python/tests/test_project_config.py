@@ -7,6 +7,9 @@ from agentseal.project_config import (
     generate_unlisted_findings,
     load_project_config,
     resolve_project_config,
+    should_fail,
+    should_ignore_finding,
+    should_ignore_path,
 )
 
 
@@ -199,3 +202,62 @@ class TestUnlistedFindings:
         agents = [self._agent("Windsurf", "windsurf", status="not_installed")]
         findings = generate_unlisted_findings(cfg, agents, [])
         assert findings == []
+
+
+class TestIgnorePath:
+    def test_match_prefix(self):
+        cfg = ProjectConfig(ignore_paths=["node_modules"])
+        assert should_ignore_path(cfg, "node_modules/pkg/index.js") is True
+        assert should_ignore_path(cfg, "src/app.py") is False
+
+    def test_match_with_trailing_slash(self):
+        cfg = ProjectConfig(ignore_paths=["node_modules/"])
+        assert should_ignore_path(cfg, "node_modules/pkg") is True
+
+    def test_match_nested(self):
+        cfg = ProjectConfig(ignore_paths=[".git"])
+        assert should_ignore_path(cfg, ".git/objects/abc") is True
+        assert should_ignore_path(cfg, "src/.git/config") is True
+
+    def test_empty_list(self):
+        cfg = ProjectConfig(ignore_paths=[])
+        assert should_ignore_path(cfg, "anything") is False
+
+
+class TestIgnoreFinding:
+    def test_bare_code_match(self):
+        cfg = ProjectConfig(ignore_findings=[{"id": "SKILL-001", "reason": "safe"}])
+        assert should_ignore_finding(cfg, "SKILL-001", "./CLAUDE.md") is True
+        assert should_ignore_finding(cfg, "SKILL-001", "./other.md") is True
+
+    def test_code_path_match(self):
+        cfg = ProjectConfig(ignore_findings=[
+            {"id": "SKILL-001:./CLAUDE.md", "reason": "safe"},
+        ])
+        assert should_ignore_finding(cfg, "SKILL-001", "./CLAUDE.md") is True
+        assert should_ignore_finding(cfg, "SKILL-001", "./other.md") is False
+
+    def test_no_match(self):
+        cfg = ProjectConfig(ignore_findings=[{"id": "MCP-007", "reason": "safe"}])
+        assert should_ignore_finding(cfg, "SKILL-001", "./CLAUDE.md") is False
+
+    def test_empty_list(self):
+        cfg = ProjectConfig(ignore_findings=[])
+        assert should_ignore_finding(cfg, "SKILL-001", "./CLAUDE.md") is False
+
+
+class TestShouldFail:
+    def test_fail_on_danger_with_danger(self):
+        assert should_fail("danger", has_danger=True, has_warning=True) is True
+
+    def test_fail_on_danger_with_warning_only(self):
+        assert should_fail("danger", has_danger=False, has_warning=True) is False
+
+    def test_fail_on_warning_with_warning(self):
+        assert should_fail("warning", has_danger=False, has_warning=True) is True
+
+    def test_fail_on_safe_always_fails(self):
+        assert should_fail("safe", has_danger=False, has_warning=False, has_safe=True) is True
+
+    def test_fail_on_safe_no_findings(self):
+        assert should_fail("safe", has_danger=False, has_warning=False, has_safe=False) is False
