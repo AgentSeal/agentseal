@@ -57,7 +57,10 @@ def bulk_check(slugs: list[str], *, api_key: str | None = None) -> dict[str, dic
     req = urllib.request.Request(
         BULK_CHECK_URL,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "agentseal-guard/0.8",
+        },
         method="POST",
     )
     if api_key:
