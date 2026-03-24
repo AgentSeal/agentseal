@@ -48,6 +48,17 @@ class SkillFinding:
             "remediation": self.remediation,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "SkillFinding":
+        return cls(
+            code=d.get("code", ""),
+            title=d.get("title", ""),
+            description=d.get("description", ""),
+            severity=d.get("severity", ""),
+            evidence=d.get("evidence", ""),
+            remediation=d.get("remediation", ""),
+        )
+
 
 @dataclass
 class SkillResult:
@@ -76,6 +87,17 @@ class SkillResult:
             "sha256": self.sha256,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "SkillResult":
+        return cls(
+            name=d.get("name", ""),
+            path=d.get("path", ""),
+            verdict=GuardVerdict(d.get("verdict", "safe")),
+            findings=[SkillFinding.from_dict(f) for f in d.get("findings", [])],
+            blocklist_match=d.get("blocklist_match", False),
+            sha256=d.get("sha256", ""),
+        )
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # MCP CONFIG SCANNING MODELS
@@ -98,6 +120,16 @@ class MCPFinding:
             "severity": self.severity,
             "remediation": self.remediation,
         }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "MCPFinding":
+        return cls(
+            code=d.get("code", ""),
+            title=d.get("title", ""),
+            description=d.get("description", ""),
+            severity=d.get("severity", ""),
+            remediation=d.get("remediation", ""),
+        )
 
 
 @dataclass
@@ -124,6 +156,16 @@ class MCPServerResult:
             "findings": [f.to_dict() for f in self.findings],
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "MCPServerResult":
+        return cls(
+            name=d.get("name", ""),
+            command=d.get("command", ""),
+            source_file=d.get("source_file", ""),
+            verdict=GuardVerdict(d.get("verdict", "safe")),
+            findings=[MCPFinding.from_dict(f) for f in d.get("findings", [])],
+        )
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # AGENT DISCOVERY MODELS
@@ -148,6 +190,17 @@ class AgentConfigResult:
             "skills_count": self.skills_count,
             "status": self.status,
         }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AgentConfigResult":
+        return cls(
+            name=d.get("name", ""),
+            config_path=d.get("config_path", ""),
+            agent_type=d.get("agent_type", ""),
+            mcp_servers=d.get("mcp_servers", 0),
+            skills_count=d.get("skills_count", 0),
+            status=d.get("status", ""),
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -377,6 +430,22 @@ class GuardReport:
             d["unlisted_findings"] = [f.to_dict() for f in self.unlisted_findings]
         d["config_path"] = self.config_path or None
         return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "GuardReport":
+        return cls(
+            timestamp=d["timestamp"],
+            duration_seconds=d["duration_seconds"],
+            agents_found=[AgentConfigResult.from_dict(a) for a in d["agents_found"]],
+            skill_results=[SkillResult.from_dict(s) for s in d["skill_results"]],
+            mcp_results=[MCPServerResult.from_dict(m) for m in d["mcp_results"]],
+            mcp_runtime_results=[],
+            toxic_flows=[],
+            baseline_changes=[],
+            llm_tokens_used=d.get("llm_tokens_used", 0),
+            unlisted_findings=[],
+            config_path=d.get("config_path") or "",
+        )
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
