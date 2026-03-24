@@ -1024,6 +1024,22 @@ def _run_guard(args):
             base_url=base_url,
         )
 
+    # Load project config
+    from agentseal.project_config import resolve_project_config, should_ignore_finding, should_fail
+    config_path_arg = getattr(args, "config", None)
+    project_config = None
+    try:
+        project_config = resolve_project_config(
+            config_path=Path(config_path_arg) if config_path_arg else None,
+            search_dir=Path(scan_path) if scan_path else None,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"  {R}Config error: {e}{RST}", file=sys.stderr)
+        sys.exit(1)
+
+    if project_config and not structured_output:
+        print(f"  {D}Using config: {project_config.config_path}{RST}")
+
     guard = Guard(
         semantic=not getattr(args, "no_semantic", False),
         verbose=verbose,
@@ -1032,6 +1048,7 @@ def _run_guard(args):
         timeout=getattr(args, "timeout", 30.0),
         concurrency=getattr(args, "concurrency", 3),
         scan_path=scan_path,
+        project_config=project_config,
         **({"llm_judge": llm_judge} if llm_judge else {}),
     )
     report = guard.run()
@@ -1042,13 +1059,40 @@ def _run_guard(args):
     except Exception:
         pass  # Best-effort save
 
+    # Apply ignore_findings from project config
+    if project_config:
+        report.config_path = project_config.config_path
+        for sr in report.skill_results:
+            sr.findings = [
+                f for f in sr.findings
+                if not should_ignore_finding(project_config, f.code, sr.path)
+            ]
+        for mr in report.mcp_results:
+            mr.findings = [
+                f for f in mr.findings
+                if not should_ignore_finding(project_config, f.code, mr.source_file)
+            ]
+
+    def _exit_code():
+        if project_config:
+            has_error = any(
+                s.verdict == GuardVerdict.ERROR for s in report.skill_results
+            )
+            return 1 if should_fail(
+                project_config.fail_on,
+                has_danger=report.total_dangers > 0 or has_error,
+                has_warning=report.total_warnings > 0,
+                has_safe=report.total_safe > 0,
+            ) else 0
+        return 1 if report.has_critical else 0
+
     # ── JSON output ────────────────────────────────────────────────
     if json_mode:
         print(report.to_json())
         if getattr(args, "save", None):
             Path(args.save).write_text(report.to_json(), encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
     # ── SARIF output ──────────────────────────────────────────────
@@ -1059,7 +1103,7 @@ def _run_guard(args):
         if getattr(args, "save", None):
             Path(args.save).write_text(sarif_json, encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
     # ── HTML output ───────────────────────────────────────────────
@@ -1069,7 +1113,7 @@ def _run_guard(args):
         if getattr(args, "save", None):
             Path(args.save).write_text(html, encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
     # ── Terminal output (kubectl/docker style) ─────────────────────
@@ -1313,9 +1357,8 @@ def _run_guard(args):
         print(f"  {D}Results saved to {args.save}{RST}")
         print()
 
-    # Exit code: 1 if critical threats found
-    if report.has_critical:
-        sys.exit(1)
+    # Exit code: determined by project config or default critical check
+    sys.exit(_exit_code())
 
 
 def _run_scan_mcp(args):
