@@ -77,8 +77,8 @@ export {
   deobfuscate,
   stripZeroWidth, stripTagChars, stripVariationSelectors,
   stripBidiControls, stripHtmlComments, hasInvisibleChars,
-  normalizeUnicode, decodeBase64Blocks, unescapeSequences,
-  expandStringConcat,
+  normalizeUnicode, decodeHtmlEntities, decodeBase64Blocks,
+  unescapeSequences, expandStringConcat,
 } from "./deobfuscate.js";
 
 // Guard models

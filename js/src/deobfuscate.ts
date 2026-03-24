@@ -90,9 +90,61 @@ export function hasInvisibleChars(text: string): boolean {
 // TRANSFORM FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════
 
-/** Apply NFKC unicode normalization (homoglyphs → ASCII). */
+/**
+ * TR39 confusable character mappings.
+ * Characters from other scripts that visually resemble ASCII but have
+ * different codepoints.  Applied AFTER NFKC to catch what normalization misses.
+ */
+const CONFUSABLES: Map<string, string> = new Map([
+  // — Cyrillic uppercase —
+  ["\u0410", "A"], ["\u0412", "B"], ["\u0421", "C"], ["\u0415", "E"],
+  ["\u041D", "H"], ["\u0406", "I"], ["\u0408", "J"], ["\u041A", "K"],
+  ["\u041C", "M"], ["\u041E", "O"], ["\u0420", "P"], ["\u0405", "S"],
+  ["\u0422", "T"], ["\u0425", "X"], ["\u0423", "Y"], ["\u0417", "Z"],
+  // — Cyrillic lowercase —
+  ["\u0430", "a"], ["\u0441", "c"], ["\u0435", "e"], ["\u04BB", "h"],
+  ["\u0456", "i"], ["\u0458", "j"], ["\u043E", "o"], ["\u0440", "p"],
+  ["\u0455", "s"], ["\u0445", "x"], ["\u0443", "y"],
+  // — Greek uppercase —
+  ["\u0391", "A"], ["\u0392", "B"], ["\u0395", "E"], ["\u0397", "H"],
+  ["\u0399", "I"], ["\u039A", "K"], ["\u039C", "M"], ["\u039D", "N"],
+  ["\u039F", "O"], ["\u03A1", "P"], ["\u03A4", "T"], ["\u03A7", "X"],
+  ["\u03A5", "Y"], ["\u0396", "Z"],
+  // — Greek lowercase —
+  ["\u03BF", "o"], ["\u03B1", "a"],
+  // — Cherokee —
+  ["\u13A0", "D"], ["\u13A1", "R"], ["\u13A2", "T"], ["\u13AA", "G"],
+  ["\u13B3", "W"], ["\u13D2", "S"], ["\u13DA", "S"],
+  ["\uAB4E", "s"], ["\uAB4F", "s"], ["\uABA3", "s"], ["\uABAA", "s"],
+  // — Turkish dotless i —
+  ["\u0131", "i"],
+  // — Small caps —
+  ["\u1D00", "A"], ["\u0299", "B"], ["\u1D04", "C"],
+  // — Fullwidth Latin uppercase A–Z (U+FF21–U+FF3A) —
+  ...Array.from({ length: 26 }, (_, i): [string, string] => [
+    String.fromCharCode(0xFF21 + i),
+    String.fromCharCode(0x41 + i),
+  ]),
+  // — Fullwidth Latin lowercase a–z (U+FF41–U+FF5A) —
+  ...Array.from({ length: 26 }, (_, i): [string, string] => [
+    String.fromCharCode(0xFF41 + i),
+    String.fromCharCode(0x61 + i),
+  ]),
+]);
+
+/**
+ * Apply NFKC unicode normalization then TR39 confusable mapping.
+ * NFKC handles compatibility decompositions (fullwidth, ligatures).
+ * The confusable map catches cross-script homoglyphs that NFKC misses
+ * (Cyrillic, Greek, Cherokee, etc.).
+ */
 export function normalizeUnicode(text: string): string {
-  return text.normalize("NFKC");
+  let result = text.normalize("NFKC");
+  let out = "";
+  for (const ch of result) {
+    out += CONFUSABLES.get(ch) ?? ch;
+  }
+  return out;
 }
 
 /** Check if decoded bytes are valid printable text. */
@@ -187,33 +239,66 @@ export function expandStringConcat(text: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// HTML ENTITY DECODING
+// ═══════════════════════════════════════════════════════════════════════
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+  nbsp: "\u00A0", copy: "\u00A9", reg: "\u00AE",
+};
+
+/**
+ * Decode HTML character references (numeric, hex, and named).
+ * Handles &#99; (decimal), &#x63; (hex), and &amp; (named) forms.
+ */
+export function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-zA-Z]+);/g, (match, name) => NAMED_ENTITIES[name.toLowerCase()] ?? match);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN PIPELINE
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Apply all deobfuscation transforms to text.
+ * Single deobfuscation pass — all transforms in order.
  *
- * Returns cleaned text for regex pattern matching.
- * Transforms applied in order (same as Python):
  * 1. stripZeroWidth
  * 2. stripTagChars
  * 3. stripVariationSelectors
  * 4. stripBidiControls
  * 5. stripHtmlComments
- * 6. normalizeUnicode (NFKC)
- * 7. decodeBase64Blocks
- * 8. unescapeSequences
- * 9. expandStringConcat
+ * 6. decodeHtmlEntities
+ * 7. normalizeUnicode (NFKC + TR39 confusables)
+ * 8. decodeBase64Blocks
+ * 9. unescapeSequences
+ * 10. expandStringConcat
  */
-export function deobfuscate(text: string): string {
+function _deobfuscatePass(text: string): string {
   text = stripZeroWidth(text);
   text = stripTagChars(text);
   text = stripVariationSelectors(text);
   text = stripBidiControls(text);
   text = stripHtmlComments(text);
+  text = decodeHtmlEntities(text);
   text = normalizeUnicode(text);
   text = decodeBase64Blocks(text);
   text = unescapeSequences(text);
   text = expandStringConcat(text);
+  return text;
+}
+
+/**
+ * Apply all deobfuscation transforms to text (2-pass pipeline).
+ *
+ * Two passes catch nested obfuscation where the first pass reveals
+ * content that a second pass can further decode (e.g. base64 hidden
+ * inside zero-width splits, or escape sequences inside HTML entities).
+ */
+export function deobfuscate(text: string): string {
+  text = _deobfuscatePass(text);
+  text = _deobfuscatePass(text);
   return text;
 }
