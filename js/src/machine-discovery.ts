@@ -646,7 +646,8 @@ export function scanMachine(): DiscoveryResult {
   const seenServers = new Set<string>();
   const uniqueServers: MCPServerConfig[] = [];
   for (const srv of allMCPServers) {
-    const id = (srv.command as string ?? srv.url as string ?? "") as string;
+    const cmd = srv.command ?? srv.url ?? "";
+    const id = Array.isArray(cmd) ? cmd.join(" ") : String(cmd);
     const key = `${srv.name}::${id}`;
     if (!seenServers.has(key)) {
       seenServers.add(key);
