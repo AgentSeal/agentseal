@@ -735,7 +735,11 @@ class TestAnalyzeServer(unittest.TestCase):
 
 class TestSemanticAnalysis(unittest.TestCase):
     def test_high_similarity_triggers_finding(self):
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed (optional dependency)")
+            return
 
         mock_semantic = MagicMock()
         # Return normalized vectors: first call = reference corpus, second = tool desc
