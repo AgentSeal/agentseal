@@ -48,3 +48,19 @@ python/agentseal/probes/rag_poisoning.py
 python/agentseal/probes/multimodal.py
 python/agentseal/genome.py
 python/agentseal/report.py
+
+# Private infrastructure (multi-agent pipeline, NOT open source)
+CLAUDE.md
+.claude/
+.pi/
+justfile
+ruff.toml
+agent.sh
+develop.sh
+research.sh
+work.sh
+sync.sh
+validate.sh
+audit.sh
+research/
+docs/superpowers/
