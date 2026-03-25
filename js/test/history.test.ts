@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
+import { createRequire } from "node:module";
 import {
   normalizeSkillPath,
   HistoryStore,
@@ -9,6 +10,17 @@ import {
 } from "../src/history.js";
 import type { GuardReport } from "../src/guard-models.js";
 import { GuardVerdict } from "../src/guard-models.js";
+
+// Check if better-sqlite3 is available (it's an optional dependency)
+let hasSqlite = false;
+try {
+  const _require = createRequire(import.meta.url);
+  _require("better-sqlite3");
+  hasSqlite = true;
+} catch {
+  // not available
+}
+const describeIfSqlite = hasSqlite ? describe : describe.skip;
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -94,7 +106,7 @@ describe("normalizeSkillPath", () => {
 // HistoryStore
 // ═══════════════════════════════════════════════════════════════════════
 
-describe("HistoryStore", () => {
+describeIfSqlite("HistoryStore", () => {
   const tmpDirs: string[] = [];
 
   function makeStore(opts?: { maxRows?: number; retentionDays?: number }): {
