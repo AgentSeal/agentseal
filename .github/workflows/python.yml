@@ -1,0 +1,54 @@
+name: Python Package
+
+on:
+  push:
+    paths: ["python/**"]
+    branches: [main]
+  pull_request:
+    paths: ["python/**"]
+  merge_group:
+
+defaults:
+  run:
+    working-directory: python
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+      - name: Install package and test deps
+        run: pip install -e . && pip install pytest ruff
+      - name: Lint (fatal errors only)
+        run: ruff check . --select=E9,F63,F7,F82
+      - name: Run tests
+        run: python -m pytest tests/ -x -q --tb=short
+
+  publish:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: pip install build && python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # working-directory default does NOT apply to uses actions;
+          # path is relative to $GITHUB_WORKSPACE
+          packages-dir: python/dist/
