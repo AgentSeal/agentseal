@@ -61,9 +61,11 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^2.1.0",
     "tsup": "^8.3.0",
@@ -89,5 +91,8 @@
     "@langchain/core": {
       "optional": true
     }
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.8.0"
   }
 }
