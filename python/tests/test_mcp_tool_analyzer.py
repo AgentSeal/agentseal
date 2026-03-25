@@ -771,7 +771,11 @@ class TestSemanticAnalysis(unittest.TestCase):
         self.assertTrue(len(findings) > 0)
 
     def test_low_similarity_no_semantic_finding(self):
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("numpy not installed (optional dependency)")
+            return
 
         mock_semantic = MagicMock()
         ref_count = 25
