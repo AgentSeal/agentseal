@@ -128,7 +128,8 @@ def classify_server(server: dict) -> set[str]:
     Checks known package names first, then falls back to name heuristics.
     """
     name = server.get("name", "").lower().strip()
-    command = server.get("command", "").lower()
+    raw_cmd = server.get("command", "")
+    command = (" ".join(raw_cmd) if isinstance(raw_cmd, list) else str(raw_cmd)).lower()
     args_str = " ".join(str(a) for a in server.get("args", []) if isinstance(a, str)).lower()
 
     # Check known server names (exact match)

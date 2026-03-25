@@ -34,8 +34,10 @@ def _config_fingerprint(server: dict) -> str:
     Hashes: command, sorted args, sorted env keys (not values - they may
     contain secrets that rotate).
     """
+    cmd = server.get("command", "")
+    cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
     parts = [
-        server.get("command", ""),
+        cmd_str,
         json.dumps(sorted(str(a) for a in server.get("args", []) if isinstance(a, str))),
         json.dumps(sorted(str(k) for k in server.get("env", {}) if isinstance(k, str))),
     ]
@@ -183,7 +185,8 @@ class BaselineStore:
         """
         name = server.get("name", "unknown")
         agent_type = server.get("agent_type", "unknown")
-        command = server.get("command", "")
+        raw_cmd = server.get("command", "")
+        command = " ".join(raw_cmd) if isinstance(raw_cmd, list) else str(raw_cmd)
         args = [str(a) for a in server.get("args", []) if isinstance(a, str)]
         now = datetime.now(timezone.utc).isoformat()
 

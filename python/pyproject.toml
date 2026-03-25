@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentseal"
-version = "0.7.2"
+version = "0.7.3"
 description = "Security toolkit for AI agents - machine scan for dangerous skills/MCP configs + prompt injection/extraction testing"
 readme = "README.md"
 requires-python = ">=3.10"

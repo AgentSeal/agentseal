@@ -109,8 +109,14 @@ class MCPConfigChecker:
     def check(self, server: dict) -> MCPServerResult:
         """Check a single MCP server config dict for security issues."""
         name = server.get("name", "unknown")
-        command = server.get("command", "")
+        raw_cmd = server.get("command", "")
         args = server.get("args", [])
+        # command can be a list in some MCP configs (e.g. Opencode: ["npx", "-y", "@foo/bar"])
+        if isinstance(raw_cmd, list):
+            command = str(raw_cmd[0]) if raw_cmd else ""
+            args = [str(a) for a in raw_cmd[1:]] + list(args)
+        else:
+            command = str(raw_cmd)
         env = server.get("env", {})
         source = server.get("source_file", "")
         url = server.get("url", "")
@@ -493,8 +499,13 @@ class MCPConfigChecker:
     def _check_known_cves(self, name: str, server: dict) -> list[MCPFinding]:
         """MCP-CVE: Check for known CVE patterns in MCP configurations."""
         findings = []
-        command = server.get("command", "")
-        args = server.get("args", [])
+        raw_cmd = server.get("command", "")
+        if isinstance(raw_cmd, list):
+            command = str(raw_cmd[0]) if raw_cmd else ""
+            args = [str(a) for a in raw_cmd[1:]] + list(server.get("args", []))
+        else:
+            command = str(raw_cmd)
+            args = server.get("args", [])
         source = server.get("source_file", "")
         all_args_str = " ".join(str(a) for a in args)
 

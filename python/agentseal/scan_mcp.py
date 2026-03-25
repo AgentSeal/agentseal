@@ -150,10 +150,16 @@ class ScanMCP:
     async def _connect_server(self, server: dict) -> MCPServerSnapshot | MCPConnectionError:
         """Connect to a single MCP server based on its config."""
         name = server.get("name", "unknown")
-        command = server.get("command", "")
+        raw_cmd = server.get("command", "")
         args = server.get("args", [])
         env = server.get("env")
         url = server.get("url", "")
+        # command can be a list in some MCP configs (e.g. Opencode: ["npx", "-y", "@foo/bar"])
+        if isinstance(raw_cmd, list):
+            command = str(raw_cmd[0]) if raw_cmd else ""
+            args = [str(a) for a in raw_cmd[1:]] + [str(a) for a in args]
+        else:
+            command = str(raw_cmd)
 
         # HTTP/SSE endpoint
         if url:
