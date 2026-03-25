@@ -406,3 +406,77 @@ describe("Edge cases", () => {
     expect(result.name).toBe("test");
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// MCP-007: Supply chain — bunx, deno, docker, pip, go
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("supply chain - bunx", () => {
+  it("detects unpinned bunx package", () => {
+    const result = checker.check({ name: "t", command: "bunx", args: ["@scope/pkg"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007")).toBe(true);
+  });
+
+  it("passes pinned bunx package", () => {
+    const result = checker.check({ name: "t", command: "bunx", args: ["@scope/pkg@1.2.3"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.code === "MCP-007" && f.title.includes("bunx"))).toHaveLength(0);
+  });
+});
+
+describe("supply chain - deno", () => {
+  it("detects unpinned deno run", () => {
+    const result = checker.check({ name: "t", command: "deno", args: ["run", "--allow-net", "npm:express"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007" && f.title.includes("deno"))).toBe(true);
+  });
+
+  it("skips local deno run path", () => {
+    const result = checker.check({ name: "t", command: "deno", args: ["run", "./main.ts"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.title.includes("deno"))).toHaveLength(0);
+  });
+});
+
+describe("supply chain - docker", () => {
+  it("detects docker image with :latest tag", () => {
+    const result = checker.check({ name: "t", command: "docker", args: ["run", "myimage:latest"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007" && f.title.includes("docker"))).toBe(true);
+  });
+
+  it("detects docker image with no tag", () => {
+    const result = checker.check({ name: "t", command: "docker", args: ["run", "myimage"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007" && f.title.includes("docker"))).toBe(true);
+  });
+
+  it("passes docker image with specific tag", () => {
+    const result = checker.check({ name: "t", command: "docker", args: ["run", "myimage:1.2.3"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.title.includes("docker"))).toHaveLength(0);
+  });
+});
+
+describe("supply chain - pip", () => {
+  it("detects unpinned pip install", () => {
+    const result = checker.check({ name: "t", command: "pip", args: ["install", "requests"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007" && f.title.includes("pip"))).toBe(true);
+  });
+
+  it("passes pinned pip install", () => {
+    const result = checker.check({ name: "t", command: "pip", args: ["install", "requests==2.31.0"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.title.includes("pip"))).toHaveLength(0);
+  });
+});
+
+describe("supply chain - go", () => {
+  it("detects unpinned go run", () => {
+    const result = checker.check({ name: "t", command: "go", args: ["run", "github.com/user/tool"], source_file: "f" });
+    expect(result.findings.some((f: any) => f.code === "MCP-007" && f.title.includes("go"))).toBe(true);
+  });
+
+  it("passes pinned go run", () => {
+    const result = checker.check({ name: "t", command: "go", args: ["run", "github.com/user/tool@v1.0.0"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.title.includes("go"))).toHaveLength(0);
+  });
+
+  it("skips local go run path", () => {
+    const result = checker.check({ name: "t", command: "go", args: ["run", "./cmd/server"], source_file: "f" });
+    expect(result.findings.filter((f: any) => f.title.includes("go"))).toHaveLength(0);
+  });
+});

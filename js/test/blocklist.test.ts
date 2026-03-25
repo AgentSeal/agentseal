@@ -39,7 +39,7 @@ describe("Blocklist", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "bl-"));
     const bl = new Blocklist(tmpDir);
     expect(bl.isBlocked("abc123")).toBe(false);
-    expect(bl.size).toBe(0);
+    expect(bl.size).toBe(12);
   });
 
   it("addHashes makes hashes blocked", () => {
@@ -68,7 +68,7 @@ describe("Blocklist", () => {
     const bl = new Blocklist(tmpDir);
     expect(bl.isBlocked("aaa111")).toBe(true);
     expect(bl.isBlocked("bbb222")).toBe(true);
-    expect(bl.size).toBe(2);
+    expect(bl.size).toBe(14);
   });
 
   it("handles malformed cache gracefully", () => {
@@ -77,7 +77,7 @@ describe("Blocklist", () => {
     writeFileSync(cacheFile, "not valid json{{{");
     const bl = new Blocklist(tmpDir);
     expect(bl.isBlocked("anything")).toBe(false);
-    expect(bl.size).toBe(0);
+    expect(bl.size).toBe(12);
   });
 
   it("handles missing sha256_hashes key", () => {
@@ -85,7 +85,7 @@ describe("Blocklist", () => {
     const cacheFile = join(tmpDir, "blocklist.json");
     writeFileSync(cacheFile, JSON.stringify({ other_key: [] }));
     const bl = new Blocklist(tmpDir);
-    expect(bl.size).toBe(0);
+    expect(bl.size).toBe(12);
   });
 
   it("setCacheDir resets state", () => {
@@ -113,5 +113,29 @@ describe("Blocklist", () => {
 
   it("CACHE_TTL is 1 hour", () => {
     expect(Blocklist.CACHE_TTL).toBe(3600);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SEED HASHES
+// ═══════════════════════════════════════════════════════════════════════
+
+describe("seed hashes", () => {
+  it("has 12 seed hashes on construction", () => {
+    const bl = new Blocklist(mkdtempSync(join(tmpdir(), "bl-")));
+    expect(bl.size).toBeGreaterThanOrEqual(12);
+  });
+
+  it("recognizes credential-theft-cursorrules hash", () => {
+    const bl = new Blocklist(mkdtempSync(join(tmpdir(), "bl-")));
+    expect(bl.isBlocked("854aa9bd5a641b03fcf2e4a26affb33057af3238a10a83e194c05384f371734f")).toBe(true);
+  });
+
+  it("seed hashes survive file load", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bl-"));
+    writeFileSync(join(dir, "blocklist.json"), JSON.stringify({ sha256_hashes: ["aaa"], updated: new Date().toISOString() }));
+    const bl = new Blocklist(dir);
+    expect(bl.isBlocked("854aa9bd5a641b03fcf2e4a26affb33057af3238a10a83e194c05384f371734f")).toBe(true);
+    expect(bl.isBlocked("aaa")).toBe(true);
   });
 });

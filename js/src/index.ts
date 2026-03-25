@@ -77,8 +77,8 @@ export {
   deobfuscate,
   stripZeroWidth, stripTagChars, stripVariationSelectors,
   stripBidiControls, stripHtmlComments, hasInvisibleChars,
-  normalizeUnicode, decodeBase64Blocks, unescapeSequences,
-  expandStringConcat,
+  normalizeUnicode, decodeHtmlEntities, decodeBase64Blocks,
+  unescapeSequences, expandStringConcat,
 } from "./deobfuscate.js";
 
 // Guard models
@@ -86,12 +86,17 @@ export {
   GuardVerdict, SEVERITY_ORDER,
   topSkillFinding, topMCPFinding,
   totalDangers, totalWarnings, totalSafe, hasCritical, allActions,
+  guardReportFromDict,
+  customFindingFromDict, customFindingToDict,
+  unlistedFindingToDict, deltaEntryToDict,
+  DeltaResult,
   type SkillFinding, type SkillResult,
   type MCPFinding, type MCPServerResult,
   type AgentConfigResult,
   type MCPRuntimeFinding, type MCPRuntimeResult,
   type ToxicFlowResult, type BaselineChangeResult,
   type GuardReport,
+  type UnlistedFinding, type CustomFinding, type DeltaEntry,
 } from "./guard-models.js";
 
 // Skill scanner
@@ -153,6 +158,30 @@ export {
 
 // Notifier
 export { Notifier } from "./notify.js";
+
+// Project config
+export {
+  loadProjectConfig, resolveProjectConfig,
+  shouldIgnorePath, shouldIgnoreFinding, shouldFail,
+  generateUnlistedFindings, generateConfigYaml, runGuardInit,
+  type ProjectConfig, type IgnoreFindingEntry,
+} from "./project-config.js";
+
+// Registry client
+export {
+  slugify, extractPackageSlug, bulkCheck, enrichMcpResults,
+} from "./registry-client.js";
+
+// Rules engine
+export {
+  fnmatchCase, RuleEngine,
+  type Rule, type RuleTest, type RuleTestResult,
+} from "./rules.js";
+
+// History & delta
+export {
+  normalizeSkillPath, HistoryStore, computeDelta,
+} from "./history.js";
 
 // Shield
 export {

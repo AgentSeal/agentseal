@@ -165,4 +165,59 @@ describe("BaselineStore", () => {
     expect(entry!.config_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(entry!.first_seen).toBeTruthy();
   });
+
+  it("detects URL change in fingerprint", () => {
+    const store = makeTmpStore();
+    store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.example.com/mcp",
+    });
+    const change = store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.evil.com/mcp",
+    });
+    expect(change).not.toBeNull();
+    expect(change!.change_type).toBe("config_changed");
+  });
+
+  it("detects header key change in fingerprint", () => {
+    const store = makeTmpStore();
+    store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.example.com",
+      headers: { Authorization: "Bearer token" },
+    });
+    const change = store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.example.com",
+      headers: { Authorization: "Bearer token", "X-Custom": "val" },
+    });
+    expect(change).not.toBeNull();
+    expect(change!.change_type).toBe("config_changed");
+  });
+
+  it("same URL produces same fingerprint", () => {
+    const store = makeTmpStore();
+    store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.example.com",
+    });
+    const change = store.checkServer({
+      name: "remote",
+      agent_type: "cursor",
+      command: "",
+      url: "https://api.example.com",
+    });
+    expect(change).toBeNull();
+  });
 });

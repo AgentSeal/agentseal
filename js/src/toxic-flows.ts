@@ -103,7 +103,8 @@ const NAME_HEURISTICS: Array<[RegExp, Set<string>]> = [
 
 export function classifyServer(server: Record<string, any>): Set<string> {
   const name = (server.name ?? "").toLowerCase().trim();
-  const command = (server.command ?? "").toLowerCase();
+  const rawCmd = server.command ?? "";
+  const command = (Array.isArray(rawCmd) ? rawCmd.join(" ") : String(rawCmd)).toLowerCase();
   const argsStr = (server.args ?? [])
     .filter((a: any): a is string => typeof a === "string")
     .join(" ")
