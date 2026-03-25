@@ -464,9 +464,10 @@ def classify_tool(tool: MCPToolSnapshot, server_name: str) -> ToolCapability:
         max_confidence = max(max_confidence, 1.0)
 
     if annotations.get("readOnlyHint") is True:
-        # Read-only annotation takes precedence — remove destructive label
-        labels.discard(LABEL_DESTRUCTIVE)
-        max_confidence = max(max_confidence, 1.0)
+        # Annotations are attacker-controlled. A malicious server can set
+        # readOnlyHint=true on a destructive tool to evade detection.
+        # Only use annotations to ADD labels, never to REMOVE them.
+        pass
 
     if annotations.get("openWorldHint") is True:
         labels.add(LABEL_UNTRUSTED)

@@ -25,6 +25,9 @@ from agentseal.guard_models import (
 )
 from agentseal.machine_discovery import scan_directory, scan_machine
 from agentseal.mcp_checker import MCPConfigChecker
+from agentseal.project_config import (
+    ProjectConfig, generate_unlisted_findings, should_ignore_path,
+)
 from agentseal.skill_scanner import SkillScanner
 from agentseal.toxic_flows import analyze_toxic_flows
 
@@ -46,6 +49,7 @@ class Guard:
         timeout: float = 30.0,
         concurrency: int = 3,
         scan_path: Optional[str] = None,
+        project_config: Optional[ProjectConfig] = None,
     ):
         self.semantic = semantic
         self.verbose = verbose
@@ -55,6 +59,7 @@ class Guard:
         self._timeout = timeout
         self._concurrency = concurrency
         self._scan_path = scan_path
+        self._project_config = project_config
 
     def run(self) -> GuardReport:
         """Execute full guard scan. Returns a GuardReport with all findings."""
@@ -74,6 +79,17 @@ class Guard:
             f"Found {installed_count} agents, {len(skill_paths)} skills, "
             f"{len(mcp_servers)} MCP servers",
         )
+
+        # Apply ignore_paths from project config
+        if self._project_config and self._project_config.ignore_paths:
+            original = len(skill_paths)
+            skill_paths = [
+                p for p in skill_paths
+                if not should_ignore_path(self._project_config, str(p))
+            ]
+            filtered = original - len(skill_paths)
+            if filtered:
+                self._progress("discover", f"Filtered {filtered} skill(s) via ignore_paths")
 
         # Phase 2: Scan skills
         self._progress("skills", f"Scanning {len(skill_paths)} skills for threats...")
@@ -197,6 +213,15 @@ class Guard:
 
         duration = time.monotonic() - start
 
+        # Generate UNLISTED findings from project config
+        unlisted = []
+        if self._project_config:
+            unlisted = generate_unlisted_findings(
+                self._project_config, agents, mcp_servers,
+            )
+            if unlisted:
+                self._progress("config", f"{len(unlisted)} unlisted item(s) detected")
+
         return GuardReport(
             timestamp=datetime.now(timezone.utc).isoformat(),
             duration_seconds=round(duration, 2),
@@ -207,4 +232,6 @@ class Guard:
             toxic_flows=toxic_flow_results,
             baseline_changes=baseline_results,
             llm_tokens_used=llm_tokens_used,
+            unlisted_findings=unlisted,
+            config_path=self._project_config.config_path if self._project_config else "",
         )

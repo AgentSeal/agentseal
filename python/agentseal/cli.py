@@ -105,40 +105,30 @@ def _print_banner(show_tagline=True):
 
     term_width = shutil.get_terminal_size((80, 24)).columns
 
-    # Full logo (needs 50 cols) and compact logo (needs 32 cols)
+    # Full logo (needs 40 cols) and compact logo (needs 32 cols)
     _logo_full = [
-        r"                      =*-                      ",
-        r"                .=*#%%%%%%%#+-.                ",
-        r"           .:+##%%%%%#+=*#%######=:.           ",
-        r"       .=**####*#*-         -***######+.       ",
-        r"  .+#####*+**:     +%%%%%%%:     :*#*##%%%#+.  ",
-        r"  =%%##*-.        +%%%%%%%%#.        .-*%#%%+  ",
-        r"  =###:          =#%%%%%%%%%#.          :#%%+  ",
-        r"  =##*:         -##%%%%%%%%%%*          :###+  ",
-        r"  =##*:        :*####%%%%#####*         :*##+  ",
-        r"  -**+:       .=**#############+        :***=  ",
-        r"  :*+=-      .=++*****+.*+******=       -***-  ",
-        r"  .+=-+      =*****+==   +-==++++-      ++**:  ",
-        r"   ----     *#####*+#    :=...:---:     +*#*.  ",
-        r"   :-=-:   +#######*      :=:......:   :*##+   ",
-        r"    =+++:  *#%%%%#%+=======*+===--::.  *###:   ",
-        r"    .+***- =%%%%%%%#######*******+++-:.###=    ",
-        r"     .*####. *#%%##################**+.:#*     ",
-        r"       +#%%%#- .:+%%##*****###########+..      ",
-        r"         =#%%###+-            *###%%%##+.      ",
-        r"     :**=.                     +##%%%%%#*      ",
-        r"    .*#####**#                  *##%%%%%%*     ",
-        r"    ##%%%##*+:                   *#%%%%%%%*    ",
-        r"   *%%%%%##*- *+:             -*-.*##%%%%%%*   ",
-        r"  +%%%%%%%*- +###+:         =*##%-.*##%%%%%%=  ",
-        r" +%%%%%%%** .######*+:   :=**####* :*##%%%%%%= ",
-        r" *%%%%%##+    .*##%%%#####******.   .####%%%%* ",
-        r"                .=%%%%%%%###*-                 ",
-        r"                   .+#%%%#+.                   ",
+        r"              .++.              ",
+        r"         .*@@@@@@@@@@*.         ",
+        r"    .#@@@@@@*.    .#@@@@@@#.    ",
+        r" @@@@@@*     @@@@@#     %@@@@@@ ",
+        r" @@%        @@@@@@@*        %@@ ",
+        r" @@%       %@@@@@@@@+       #@@ ",
+        r" @@#      #@@@@@@@@@@=      #@@ ",
+        r" #@%.    %@@@@@ .@@@@@=    .@@@ ",
+        r" -@%.   @@@@@@   .%%%%%=   :@@* ",
+        r"  %@%  @@@@@@=    +@@@%#=  %@@  ",
+        r"  .@@@. @@@@@@@@@@@@@@@@@=.@@-  ",
+        r"   .%@@@-.+%@@@@@@@@@@@@@@+--   ",
+        r"     :+@@@%:        .@@@@@@=    ",
+        r"   =@@@%*=            @@@@@@=   ",
+        r"  -@@@@@@              @@@@@@-  ",
+        r" -@@@@@@ %@@:      :@@* @@@@@@: ",
+        r" @@@@@@  -@@@@@. %@@@@=  @@@@@@ ",
+        r"           .#@@@@@@%.           ",
+        r"              .++.              ",
     ]
     _gradient_full = [
-        51, 51, 45, 45, 39, 39, 33, 33, 63, 63, 99, 99, 135, 135,
-        171, 171, 207, 207, 207, 171, 171, 135, 135, 99, 99, 63, 63, 33,
+        51, 51, 45, 39, 39, 33, 63, 63, 99, 99, 135, 171, 207, 207, 171, 135, 99, 63, 33,
     ]
 
     _logo_compact = [
@@ -164,8 +154,8 @@ def _print_banner(show_tagline=True):
         51, 45, 39, 33, 63, 99, 99, 135, 171, 207, 207, 171, 135, 99, 63, 33, 33,
     ]
 
-    logo_lines = _logo_full if term_width >= 50 else _logo_compact
-    gradient = _gradient_full if term_width >= 50 else _gradient_compact
+    logo_lines = _logo_full if term_width >= 40 else _logo_compact
+    gradient = _gradient_full if term_width >= 40 else _gradient_compact
 
     print()
     for i, line in enumerate(logo_lines):
@@ -430,6 +420,34 @@ def main():
         "--concurrency", type=int, default=3,
         help="Max parallel MCP connections (default: 3)",
     )
+    guard_parser.add_argument(
+        "--force", action="store_true",
+        help="Overwrite existing .agentseal.yaml (for guard init)",
+    )
+    guard_parser.add_argument(
+        "--config", type=str, default=None, metavar="FILE",
+        help="Path to .agentseal.yaml config file",
+    )
+    guard_parser.add_argument(
+        "--no-diff", action="store_true",
+        help="Suppress delta comparison against previous scan",
+    )
+    guard_parser.add_argument(
+        "--no-registry", action="store_true",
+        help="Skip MCP registry trust score enrichment (offline mode)",
+    )
+    guard_parser.add_argument(
+        "--from-json", type=str, default=None, metavar="FILE",
+        help="Load a saved JSON report and re-render (no re-scan)",
+    )
+    guard_parser.add_argument(
+        "--fail-on", type=str, default=None, choices=["danger", "warning", "safe"],
+        help="Verdict threshold for non-zero exit (overrides .agentseal.yaml)",
+    )
+    guard_parser.add_argument(
+        "--rules", type=str, default=None, metavar="PATH",
+        help="Path to custom rules YAML file or directory (for guard test)",
+    )
 
     # ── scan-mcp command ─────────────────────────────────────────────
     scanmcp_parser = subparsers.add_parser(
@@ -660,22 +678,11 @@ def _count_severities(report) -> dict[str, int]:
         for f in rr.findings:
             if f.severity in counts:
                 counts[f.severity] += 1
+    for cf in getattr(report, "custom_findings", []):
+        if cf.severity in counts:
+            counts[cf.severity] += 1
     return counts
 
-
-def _print_severity_bar(counts: dict[str, int], R, Y, C, D, RST):
-    """Print a visual severity breakdown bar."""
-    parts = []
-    for sev, color in [("critical", R), ("high", Y), ("medium", C), ("low", D)]:
-        n = counts.get(sev, 0)
-        if n > 0:
-            bar = "█" * min(n, 20)
-            parts.append(f"  {color}{sev.upper()} {bar} {n}{RST}")
-    if parts:
-        for part in parts:
-            print(part)
-    else:
-        print(f"  {D}No findings{RST}")
 
 
 # Consequence-first labels for critical findings (GAP 11)
@@ -969,6 +976,99 @@ def _run_guard(args):
     from agentseal.guard import Guard
     from agentseal.guard_models import GuardVerdict
 
+    # Get path arg early -- used for both "guard init" detection and scan path
+    scan_path = getattr(args, "path", None)
+
+    # Handle "guard init" subcommand
+    if scan_path == "init":
+        from agentseal.project_config import run_guard_init
+        force = getattr(args, "force", False)
+        success = run_guard_init(target_dir=Path.cwd(), force=force)
+        sys.exit(0 if success else 1)
+        return
+
+    # Handle "guard test" subcommand
+    if scan_path == "test":
+        from agentseal.rules import RuleEngine
+        rules_path = getattr(args, "rules", None)
+        rule_paths = []
+        if rules_path:
+            rule_paths = [rules_path]
+        else:
+            default_dir = Path.cwd() / ".agentseal" / "rules"
+            if default_dir.is_dir():
+                rule_paths = [str(default_dir)]
+        if not rule_paths:
+            print("No rules found. Create .agentseal/rules/*.yaml or use --rules")
+            sys.exit(1)
+            return
+        try:
+            engine = RuleEngine.from_paths(rule_paths)
+        except ValueError as e:
+            print(f"Rule error: {e}", file=sys.stderr)
+            sys.exit(1)
+            return
+        results = engine.run_tests()
+        if not results:
+            print("No inline tests found in rules.")
+            sys.exit(0)
+            return
+        W = 62
+        SEP = f"  \033[90m{'-' * W}\033[0m"
+        n_rules = len(set(r.rule_id for r in results))
+        n_tests = len(results)
+        print()
+        print(SEP)
+        print(f"  \033[1mRULE TESTS\033[0m{' ' * (W - 10 - len(str(n_rules)) - len(str(n_tests)) - 16)}\033[90m{n_rules} rules, {n_tests} tests\033[0m")
+        print(SEP)
+        passed = 0
+        failed = 0
+        for r in results:
+            dots = "." * max(1, 50 - len(r.rule_id) - len(r.test_name))
+            if r.passed:
+                print(f"  {r.rule_id}  {r.test_name} {dots} \033[92mPASS\033[0m")
+                passed += 1
+            else:
+                print(f"  {r.rule_id}  {r.test_name} {dots} \033[91mFAIL\033[0m")
+                print(f"            Expected: {r.expected}, Got: {r.actual}")
+                failed += 1
+        print()
+        print(f"  {passed} passed, {failed} failed")
+        print()
+        sys.exit(1 if failed > 0 else 0)
+        return
+
+    # Handle --from-json (re-render saved report, no re-scan)
+    from_json_path = getattr(args, "from_json", None)
+    if from_json_path:
+        from agentseal.guard_models import GuardReport as _GR
+        try:
+            raw = json.loads(Path(from_json_path).read_text(encoding="utf-8"))
+            report = _GR.from_dict(raw)
+        except Exception as e:
+            print(f"Error loading {from_json_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+            return
+        output_fmt = getattr(args, "output", "terminal")
+        if output_fmt == "json":
+            print(json.dumps(raw, indent=2))
+        elif output_fmt == "sarif":
+            sarif_json = json.dumps(report.to_sarif(), indent=2)
+            print(sarif_json)
+            if getattr(args, "save", None):
+                Path(args.save).write_text(sarif_json, encoding="utf-8")
+        elif output_fmt == "html":
+            html = _guard_to_html(report)
+            print(html)
+            if getattr(args, "save", None):
+                Path(args.save).write_text(html, encoding="utf-8")
+        else:
+            # Fall through to terminal rendering below
+            pass
+        if output_fmt != "terminal":
+            sys.exit(0)
+            return
+
     R = "\033[91m"     # Red
     Y = "\033[93m"     # Yellow
     G = "\033[92m"     # Green
@@ -1000,8 +1100,8 @@ def _run_guard(args):
 
     if not structured_output:
         print()
-        print(f"  {B}AgentSeal Guard{RST} — Machine Security Scan")
-        print(f"  {'─' * 48}")
+        from agentseal import __version__ as _guard_ver
+        print(f"  {B}AgentSeal Guard{RST} {D}v{_guard_ver}{RST}")
         print()
 
     llm_judge = None
@@ -1029,7 +1129,22 @@ def _run_guard(args):
             base_url=base_url,
         )
 
-    scan_path = getattr(args, "path", None)
+    # Load project config
+    from agentseal.project_config import resolve_project_config, should_ignore_finding, should_fail
+    config_path_arg = getattr(args, "config", None)
+    project_config = None
+    try:
+        project_config = resolve_project_config(
+            config_path=Path(config_path_arg) if config_path_arg else None,
+            search_dir=Path(scan_path) if scan_path else None,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"  {R}Config error: {e}{RST}", file=sys.stderr)
+        sys.exit(1)
+
+    if project_config and not structured_output:
+        print(f"  {D}Using config: {project_config.config_path}{RST}")
+
     guard = Guard(
         semantic=not getattr(args, "no_semantic", False),
         verbose=verbose,
@@ -1038,6 +1153,7 @@ def _run_guard(args):
         timeout=getattr(args, "timeout", 30.0),
         concurrency=getattr(args, "concurrency", 3),
         scan_path=scan_path,
+        project_config=project_config,
         **({"llm_judge": llm_judge} if llm_judge else {}),
     )
     report = guard.run()
@@ -1048,13 +1164,146 @@ def _run_guard(args):
     except Exception:
         pass  # Best-effort save
 
+    # ── History: save raw report (before ignore_findings filtering) ──
+    _hist_scan_path = str(Path(scan_path).resolve()) if scan_path else None
+    _hist_store = None
+    try:
+        from agentseal.history import HistoryStore
+        _hist_store = HistoryStore()
+        _hist_store.save(report, scan_path=_hist_scan_path)
+        _hist_store.prune()
+    except Exception as e:
+        if not structured_output:
+            print(f"  {D}History: {e}{RST}", file=sys.stderr)
+
+    # Apply ignore_findings from project config
+    if project_config:
+        report.config_path = project_config.config_path
+        for sr in report.skill_results:
+            sr.findings = [
+                f for f in sr.findings
+                if not should_ignore_finding(project_config, f.code, sr.path)
+            ]
+        for mr in report.mcp_results:
+            mr.findings = [
+                f for f in mr.findings
+                if not should_ignore_finding(project_config, f.code, mr.source_file)
+            ]
+
+    # ── Custom rules evaluation ──────────────────────────────────
+    try:
+        from agentseal.rules import RuleEngine
+        rule_paths = []
+        rules_arg = getattr(args, "rules", None)
+        if rules_arg:
+            rule_paths = [rules_arg]
+        elif project_config and hasattr(project_config, "rules_paths") and project_config.rules_paths:
+            rule_paths = project_config.rules_paths
+        else:
+            default_dir = Path.cwd() / ".agentseal" / "rules"
+            if default_dir.is_dir():
+                rule_paths = [str(default_dir)]
+        if rule_paths:
+            engine = RuleEngine.from_paths(rule_paths)
+            # Get raw MCP configs for rule matching
+            from agentseal.machine_discovery import scan_machine, scan_directory
+            if scan_path:
+                _, raw_mcps, _ = scan_directory(Path(scan_path))
+            else:
+                _, raw_mcps, _ = scan_machine()
+            raw_mcp_map = {s.get("name", ""): s for s in raw_mcps}
+            for mr in report.mcp_results:
+                raw = raw_mcp_map.get(mr.name, {"name": mr.name, "command": mr.command})
+                report.custom_findings.extend(engine.evaluate_mcp(mr, raw))
+            for sr in report.skill_results:
+                try:
+                    content = Path(sr.path).read_text(encoding="utf-8", errors="replace")[:10240]
+                except Exception:
+                    content = ""
+                report.custom_findings.extend(engine.evaluate_skill(sr, content))
+            for agent in report.agents_found:
+                report.custom_findings.extend(engine.evaluate_agent(agent))
+            # Apply ignore_findings to custom findings too
+            if project_config:
+                report.custom_findings = [
+                    c for c in report.custom_findings
+                    if not should_ignore_finding(project_config, c.code)
+                ]
+            if report.custom_findings and not structured_output:
+                on_progress("rules", f"{len(report.custom_findings)} custom rule match(es)")
+    except Exception as e:
+        if not structured_output:
+            import traceback
+            on_progress("rules", f"Custom rules: {e}")
+
+    # ── Registry enrichment ──────────────────────────────────────
+    if not getattr(args, "no_registry", False) and report.mcp_results:
+        try:
+            from agentseal.registry_client import enrich_mcp_results
+            api_key_env = os.environ.get("AGENTSEAL_API_KEY")
+            if not structured_output:
+                print(f"  {D}Checking registry...{RST}", end="", flush=True)
+            enrich_mcp_results(report.mcp_results, api_key=api_key_env)
+            if not structured_output:
+                enriched = sum(1 for m in report.mcp_results if m.registry_score is not None)
+                print(f"\r  {D}Registry: {enriched}/{len(report.mcp_results)} matched{RST}")
+        except Exception:
+            if not structured_output:
+                print(f"\r  {D}Registry: skipped{RST}")
+
+    # ── History: compute delta ───────────────────────────────────
+    delta = None
+    if not getattr(args, "no_diff", False) and _hist_store:
+        try:
+            from agentseal.history import compute_delta
+            prev = _hist_store.load_previous(scan_path=_hist_scan_path)
+            if prev:
+                # Apply same ignore_findings to previous for fair comparison
+                if project_config:
+                    for sr in prev.skill_results:
+                        sr.findings = [
+                            f for f in sr.findings
+                            if not should_ignore_finding(project_config, f.code, sr.path)
+                        ]
+                    for mr in prev.mcp_results:
+                        mr.findings = [
+                            f for f in mr.findings
+                            if not should_ignore_finding(project_config, f.code, mr.source_file)
+                        ]
+                delta = compute_delta(report, prev, scan_path=_hist_scan_path)
+                if not delta.entries:
+                    delta = None  # Don't show empty delta
+            _hist_store.close()
+        except Exception as e:
+            if not structured_output:
+                print(f"  {D}History: {e}{RST}", file=sys.stderr)
+
+    def _exit_code():
+        # CLI --fail-on overrides project config
+        fail_on = getattr(args, "fail_on", None)
+        if fail_on is None and project_config:
+            fail_on = project_config.fail_on
+        if fail_on:
+            has_error = any(
+                s.verdict == GuardVerdict.ERROR for s in report.skill_results
+            )
+            return 1 if should_fail(
+                fail_on,
+                has_danger=report.total_dangers > 0 or has_error,
+                has_warning=report.total_warnings > 0,
+                has_safe=report.total_safe > 0,
+            ) else 0
+        return 1 if report.has_critical else 0
+
     # ── JSON output ────────────────────────────────────────────────
     if json_mode:
-        print(report.to_json())
+        d = json.loads(report.to_json())
+        d["delta"] = delta.to_dict() if delta else None
+        print(json.dumps(d, indent=2))
         if getattr(args, "save", None):
-            Path(args.save).write_text(report.to_json(), encoding="utf-8")
+            Path(args.save).write_text(json.dumps(d, indent=2), encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
     # ── SARIF output ──────────────────────────────────────────────
@@ -1065,7 +1314,7 @@ def _run_guard(args):
         if getattr(args, "save", None):
             Path(args.save).write_text(sarif_json, encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
     # ── HTML output ───────────────────────────────────────────────
@@ -1075,176 +1324,302 @@ def _run_guard(args):
         if getattr(args, "save", None):
             Path(args.save).write_text(html, encoding="utf-8")
             print(f"Saved to {args.save}", file=sys.stderr)
-        sys.exit(1 if report.has_critical else 0)
+        sys.exit(_exit_code())
         return
 
-    # ── Terminal output ────────────────────────────────────────────
+    # ── Terminal output (kubectl/docker style) ─────────────────────
+    import re as _re
     print()
 
-    # Agents installed
-    print(f"  {B}AGENTS INSTALLED{RST}")
-    for agent in report.agents_found:
-        if agent.status == "found":
-            extra = ""
-            if agent.mcp_servers > 0:
-                extra = f" ({agent.mcp_servers} MCP servers)"
-            print(f"  {G}[OK]{RST} {agent.name:<20s} {D}{agent.config_path}{extra}{RST}")
-        elif agent.status == "installed_no_config":
-            print(f"  {D}[OK]{RST} {agent.name:<20s} {D}installed (no config){RST}")
-        elif agent.status == "error":
-            print(f"  {Y}[!!]{RST} {agent.name:<20s} {D}config error{RST}")
-        elif verbose:
-            print(f"  {D}[ - ] {agent.name:<20s} not installed{RST}")
-    print()
+    # -- ANSI-aware padding --
+    _ANSI_RE = _re.compile(r'\033\[[0-9;]*m')
 
-    # Skills
+    def _vlen(s):
+        """Visible length of string (excludes ANSI codes)."""
+        return len(_ANSI_RE.sub('', s))
+
+    def _col(s, w):
+        """Pad string to width w, accounting for ANSI escape codes."""
+        return s + ' ' * max(0, w - _vlen(s))
+
+    def _verdict(verdict, label=None):
+        if verdict == GuardVerdict.DANGER:
+            return f"{R}{label or 'DANGER'}{RST}"
+        if verdict == GuardVerdict.WARNING:
+            return f"{Y}{label or 'WARNING'}{RST}"
+        if verdict == GuardVerdict.ERROR:
+            return f"{D}ERROR{RST}"
+        return f"{G}{label or 'OK'}{RST}"
+
+    def _sev(severity):
+        sev_colors = {"critical": R, "high": Y, "medium": C, "low": D}
+        return f"{sev_colors.get(severity, D)}{severity}{RST}"
+
+    def _path(p, maxlen=40):
+        if not p or len(p) <= maxlen:
+            return p or "-"
+        parts = p.split("/")
+        if len(parts) > 3:
+            return "~/" + "/".join(parts[-2:])
+        return "..." + p[-(maxlen - 3):]
+
+    W = 62  # total table width
+    SEP = f"  {D}{'-' * W}{RST}"
+    W1 = 20  # name
+    W2 = 12  # verdict/status
+    W3 = 10  # severity/mcp count
+
+    # ── Agents ──
+    installed = [a for a in report.agents_found if a.status != "not_installed"]
+    agents_to_show = report.agents_found if verbose else installed
+    if agents_to_show:
+        n_found = len(installed)
+        print(SEP)
+        print(f"  {B}AGENTS{RST}{' ' * (W - 6 - len(str(n_found)) - 6)}{D}{n_found} found{RST}")
+        print(SEP)
+        print(f"  {D}{_col('NAME', W1)}  {_col('STATUS', W2)}  {_col('MCP', 5)}  CONFIG{RST}")
+        for agent in agents_to_show:
+            name = agent.name[:W1]
+            if agent.status == "found":
+                status = _verdict(GuardVerdict.SAFE, "ok")
+                mcp = str(agent.mcp_servers) if agent.mcp_servers > 0 else "-"
+                config = f"{D}{_path(agent.config_path)}{RST}"
+            elif agent.status == "installed_no_config":
+                status = f"{D}installed{RST}"
+                mcp = "-"
+                config = f"{D}-{RST}"
+            elif agent.status == "error":
+                status = f"{Y}error{RST}"
+                mcp = "-"
+                config = f"{D}-{RST}"
+            else:
+                status = f"{D}not found{RST}"
+                mcp = "-"
+                config = f"{D}-{RST}"
+            print(f"  {_col(name, W1)}  {_col(status, W2)}  {_col(mcp, 5)}  {config}")
+        print()
+
+    # ── Skills ──
     if report.skill_results:
-        print(f"  {B}SKILLS{RST}")
+        n_skills = len(report.skill_results)
+        print(SEP)
+        print(f"  {B}SKILLS{RST}{' ' * (W - 6 - len(str(n_skills)) - 8)}{D}{n_skills} scanned{RST}")
+        print(SEP)
+        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('SEVERITY', W3)}  FINDING{RST}")
         safe_count = 0
         for sr in report.skill_results:
-            if sr.verdict == GuardVerdict.DANGER:
+            name = sr.name[:W1]
+            if sr.verdict in (GuardVerdict.DANGER, GuardVerdict.WARNING):
                 top = sr.top_finding
-                desc = top.title if top else "Malicious"
+                is_danger = sr.verdict == GuardVerdict.DANGER
+                desc = top.title if top else ("Malicious" if is_danger else "Suspicious")
                 source = _finding_source(top) if top else ""
-                print(f"  {R}[XX]{RST} {sr.name:<25s} {R}MALWARE{RST} — {desc}")
+                sev_str = _sev(top.severity) if top else _sev("critical" if is_danger else "medium")
+                v_str = _verdict(sr.verdict)
+                print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {_col(sev_str, W3)}  {desc}")
                 if source:
-                    print(f"       {D}detected by: {source}{RST}")
-                if top and top.evidence:
-                    print(f"       {D}evidence: \"{top.evidence[:120]}\"{RST}")
+                    print(f"  {'':<{W1}}  {D}via: {source}{RST}")
+                if top and top.evidence and (is_danger or verbose):
+                    ev = top.evidence[:80].replace("\n", " ")
+                    print(f"  {'':<{W1}}  {D}evidence: \"{ev}\"{RST}")
                 if top:
-                    print(f"       {C}-> {top.remediation}{RST}")
-            elif sr.verdict == GuardVerdict.WARNING:
-                top = sr.top_finding
-                desc = top.title if top else "Suspicious"
-                source = _finding_source(top) if top else ""
-                print(f"  {Y}[!!]{RST} {sr.name:<25s} {Y}SUSPICIOUS{RST} — {desc}")
-                if source:
-                    print(f"       {D}detected by: {source}{RST}")
-                if top and top.evidence and verbose:
-                    print(f"       {D}evidence: \"{top.evidence[:120]}\"{RST}")
-                if top:
-                    print(f"       {C}-> {top.remediation}{RST}")
+                    print(f"  {'':<{W1}}  {C}fix: {top.remediation}{RST}")
             elif sr.verdict == GuardVerdict.ERROR:
                 top = sr.top_finding
                 desc = top.description if top else "Could not read"
-                print(f"  {D}[??]{RST} {sr.name:<25s} {D}ERROR{RST} — {desc}")
+                print(f"  {_col(name, W1)}  {_col(_verdict(sr.verdict), W2)}  {_col('-', W3)}  {D}{desc}{RST}")
             else:
                 if verbose:
-                    print(f"  {G}[OK]{RST} {sr.name:<25s} {G}SAFE{RST}")
+                    print(f"  {_col(name, W1)}  {_col(_verdict(sr.verdict, 'OK'), W2)}  {_col('-', W3)}  {G}clean{RST}")
                 else:
                     safe_count += 1
 
         if safe_count > 0 and not verbose:
-            print(f"  {G}[OK]{RST} {safe_count} more safe skills")
+            print(f"  {G}+ {safe_count} clean{RST}")
         print()
 
-    # MCP servers — with registry risk labels
+    # ── MCP Servers ──
     if report.mcp_results:
-        print(f"  {B}MCP SERVERS{RST}")
-        try:
-            from agentseal.mcp_registry import MCPRegistry
-            _registry = MCPRegistry()
-        except Exception:
-            _registry = None
+        n_mcp = len(report.mcp_results)
+        print(SEP)
+        print(f"  {B}MCP SERVERS{RST}{' ' * (W - 11 - len(str(n_mcp)) - 8)}{D}{n_mcp} scanned{RST}")
+        print(SEP)
+        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('REGISTRY', 14)}  FINDING{RST}")
         for mr in report.mcp_results:
-            # Look up risk info from registry
-            reg_info = None
-            if _registry:
-                reg_info = _registry.lookup(mr.name)
-            risk_tag = ""
-            if reg_info:
-                rl = reg_info.risk_level
-                rl_color = R if rl == "critical" else Y if rl == "high" else D
-                risk_tag = f" {rl_color}[{rl}]{RST}"
+            name = mr.name[:W1]
 
-            if mr.verdict == GuardVerdict.DANGER:
-                top = mr.top_finding
-                desc = top.title if top else "Critical issue"
-                print(f"  {R}[XX]{RST} {mr.name:<25s} {R}DANGER{RST} — {desc}")
-                if top:
-                    print(f"       {C}-> {top.remediation}{RST}")
-            elif mr.verdict == GuardVerdict.WARNING:
-                top = mr.top_finding
-                desc = top.title if top else "Warning"
-                print(f"  {Y}[!!]{RST} {mr.name:<25s} {Y}WARNING{RST} — {desc}")
-                if top:
-                    print(f"       {C}-> {top.remediation}{RST}")
-            else:
-                if reg_info and reg_info.risk_level in ("critical", "high"):
-                    # Config is safe but server itself is inherently risky
-                    print(f"  {G}[OK]{RST} {mr.name:<25s} {G}SAFE{RST} (config){risk_tag}")
-                    print(f"       {D}{reg_info.category} | {reg_info.description}{RST}")
+            # Registry trust score display
+            if mr.registry_score is not None:
+                rs = mr.registry_score
+                rl = mr.registry_level or "?"
+                if rl in ("EXCELLENT", "HIGH"):
+                    reg_str = f"{G}{int(rs)} {rl}{RST}"
+                elif rl == "MEDIUM":
+                    reg_str = f"{Y}{int(rs)} {rl}{RST}"
                 else:
-                    print(f"  {G}[OK]{RST} {mr.name:<25s} {G}SAFE{RST}{risk_tag}")
+                    reg_str = f"{R}{int(rs)} {rl}{RST}"
+            else:
+                reg_str = f"{D}\u2014{RST}"
+
+            if mr.verdict in (GuardVerdict.DANGER, GuardVerdict.WARNING):
+                top = mr.top_finding
+                desc = top.title if top else "Issue"
+                print(f"  {_col(name, W1)}  {_col(_verdict(mr.verdict), W2)}  {_col(reg_str, 14)}  {desc}")
+                if top:
+                    print(f"  {'':<{W1}}  {' ' * 14}  {C}fix: {top.remediation}{RST}")
+            else:
+                v_str = _verdict(mr.verdict, "OK")
+                print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {_col(reg_str, 14)}  {G}clean{RST}")
         print()
 
-    # MCP runtime results (from --connect)
+    # ── MCP Runtime ──
     if report.mcp_runtime_results:
-        print(f"  {B}MCP RUNTIME ANALYSIS{RST}")
+        n_rt = len(report.mcp_runtime_results)
+        print(SEP)
+        print(f"  {B}MCP RUNTIME{RST}{' ' * (W - 11 - len(str(n_rt)) - 9)}{D}{n_rt} analyzed{RST}")
+        print(SEP)
+        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('TOOLS', 6)}  FINDINGS{RST}")
         for rr in report.mcp_runtime_results:
-            if rr.verdict == GuardVerdict.DANGER:
-                print(f"  {R}[XX]{RST} {rr.server_name:<25s} {R}DANGER{RST} ({rr.tools_found} tools, {len(rr.findings)} finding(s))")
-            elif rr.verdict == GuardVerdict.WARNING:
-                print(f"  {Y}[!!]{RST} {rr.server_name:<25s} {Y}WARNING{RST} ({rr.tools_found} tools, {len(rr.findings)} finding(s))")
-            elif rr.connection_status != "connected":
-                print(f"  {D}[??]{RST} {rr.server_name:<25s} {D}{rr.connection_status.upper()}{RST}")
+            name = rr.server_name[:W1]
+            if rr.connection_status != "connected":
+                print(f"  {_col(name, W1)}  {_col(f'{D}{rr.connection_status}{RST}', W2)}  {_col('-', 6)}  -")
             else:
-                print(f"  {G}[OK]{RST} {rr.server_name:<25s} {G}SAFE{RST} ({rr.tools_found} tools)")
+                tools = str(rr.tools_found)
+                nf = str(len(rr.findings))
+                print(f"  {_col(name, W1)}  {_col(_verdict(rr.verdict), W2)}  {_col(tools, 6)}  {nf}")
             if verbose:
                 for finding in rr.findings:
-                    sev_color = R if finding.severity == "critical" else Y
-                    print(f"       {sev_color}{finding.code} {finding.severity.upper()}{RST} {finding.title}")
+                    print(f"  {'':<{W1}}  {_sev(finding.severity)} {finding.code} {finding.title}")
         print()
 
-    # Toxic flows
+    # ── Toxic Flows ──
     if report.toxic_flows:
-        print(f"  {B}TOXIC FLOW RISKS{RST}")
+        n_flows = len(report.toxic_flows)
+        print(SEP)
+        print(f"  {B}TOXIC FLOWS{RST}{' ' * (W - 11 - len(str(n_flows)) - 9)}{D}{n_flows} detected{RST}")
+        print(SEP)
+        print(f"  {D}{_col('RISK', 8)}  {_col('TITLE', 28)}  SERVERS{RST}")
         for flow in report.toxic_flows:
             level_color = R if flow.risk_level == "high" else Y
-            print(f"  {level_color}[{flow.risk_level.upper()}]{RST} {flow.title}")
-            print(f"       Servers: {', '.join(flow.servers_involved)}")
-            print(f"       {C}-> {flow.remediation}{RST}")
+            risk = f"{level_color}{flow.risk_level.upper()}{RST}"
+            title = flow.title[:27]
+            servers = ", ".join(flow.servers_involved)
+            print(f"  {_col(risk, 8)}  {_col(title, 28)}  {servers}")
+            print(f"  {'':8}  {C}fix: {flow.remediation}{RST}")
         print()
 
-    # Baseline changes
+    # ── Baseline Changes ──
     if report.baseline_changes:
-        print(f"  {B}BASELINE CHANGES{RST}")
+        n_bl = len(report.baseline_changes)
+        print(SEP)
+        print(f"  {B}BASELINE CHANGES{RST}{' ' * (W - 16 - len(str(n_bl)) - 9)}{D}{n_bl} detected{RST}")
+        print(SEP)
+        print(f"  {D}{_col('SERVER', W1)}  {_col('TYPE', 16)}  DETAIL{RST}")
         for change in report.baseline_changes:
-            print(f"  {Y}[!!]{RST} {change.server_name}: {change.detail}")
+            name = change.server_name[:W1]
+            ctype = change.change_type[:15]
+            print(f"  {Y}{_col(name, W1)}{RST}  {_col(ctype, 16)}  {change.detail}")
         print()
 
-    # Severity breakdown bar (GAP 11)
+    # ── Unlisted (project config) ──
+    if report.unlisted_findings:
+        n_unlisted = len(report.unlisted_findings)
+        print(SEP)
+        print(f"  {B}POLICY{RST}{' ' * (W - 6 - len(str(n_unlisted)) - 9)}{D}{n_unlisted} unlisted{RST}")
+        print(SEP)
+        print(f"  {D}{_col('ITEM', W1)}  {_col('TYPE', W2)}  FINDING{RST}")
+        for uf in report.unlisted_findings:
+            name = uf.item_name[:W1]
+            v_str = _verdict(GuardVerdict.WARNING)
+            print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {uf.description}")
+        print()
+
+    # ── Custom Rules ──
+    if report.custom_findings:
+        n_custom = len(report.custom_findings)
+        print(SEP)
+        print(f"  {B}CUSTOM RULES{RST}{' ' * (W - 12 - len(str(n_custom)) - 9)}{D}{n_custom} matched{RST}")
+        print(SEP)
+        print(f"  {D}{_col('RULE', 12)}  {_col('ENTITY', W1)}  {_col('VERDICT', W2)}  {_col('SEVERITY', W3)}  FINDING{RST}")
+        for cf in report.custom_findings:
+            entity_label = f"{cf.entity_name} ({cf.entity_type[:2]})"[:W1]
+            v_str = _verdict(GuardVerdict.DANGER if cf.verdict == "danger" else GuardVerdict.WARNING)
+            print(f"  {_col(cf.code, 12)}  {_col(entity_label, W1)}  {_col(v_str, W2)}  {_col(_sev(cf.severity), W3)}  {cf.title}")
+            if cf.remediation:
+                print(f"  {'':<12}  {'':<{W1}}  {C}fix: {cf.remediation}{RST}")
+        print()
+
+    # ── Summary ──
+    print(SEP)
+
+    # Severity counts
     _sev_counts = _count_severities(report)
     if any(_sev_counts.values()):
-        print(f"  {B}SEVERITY{RST}")
-        _print_severity_bar(_sev_counts, R, Y, C, D, RST)
+        parts = []
+        for sev_name, color in [("critical", R), ("high", Y), ("medium", C), ("low", D)]:
+            n = _sev_counts.get(sev_name, 0)
+            if n > 0:
+                parts.append(f"{color}{sev_name} {n}{RST}")
+        print(f"  {B}SEVERITY{RST}   {'   '.join(parts)}")
+
+    # Status
+    if report.has_critical:
+        print(f"  {B}STATUS{RST}     {R}{report.total_dangers} critical threat(s) found. Action required.{RST}")
+    elif report.total_toxic_flows > 0:
+        print(f"  {B}STATUS{RST}     {Y}{report.total_toxic_flows} toxic flow(s) detected. Review recommended.{RST}")
+    elif report.total_warnings > 0:
+        print(f"  {B}STATUS{RST}     {Y}{report.total_warnings} warning(s) found. Review recommended.{RST}")
+    else:
+        print(f"  {B}STATUS{RST}     {G}No threats detected. Machine looks clean.{RST}")
+
+    print(SEP)
+
+    # ── Delta ──
+    if delta:
+        def _verdict_rank(v):
+            return {"safe": 2, "warning": 1, "danger": 0, "error": 0}.get(v, -1)
+
+        print()
+        ts_display = delta.previous_timestamp[:16].replace("T", " ")
+        print(SEP)
+        print(f"  {B}DELTA{RST}{' ' * (W - 5 - len(ts_display) - 4)}{D}vs {ts_display}{RST}")
+        print(SEP)
+        for entry in delta.entries:
+            if entry.change_type in ("new", "new_entity"):
+                sev_color = R if entry.severity in ("critical", "high") else Y
+                prefix = f"  {sev_color}+ NEW{RST}"
+                if entry.code:
+                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
+                else:
+                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+            elif entry.change_type in ("resolved", "removed_entity"):
+                prefix = f"  {G}- RESOLVED{RST}"
+                if entry.code:
+                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
+                else:
+                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+            elif entry.change_type == "changed":
+                upgrade = _verdict_rank(entry.new_verdict) > _verdict_rank(entry.old_verdict)
+                color = G if upgrade else Y
+                prefix = f"  {color}~ CHANGED{RST}"
+                detail = f"{_col(entry.entity_name, W1 + 14)}{entry.old_verdict} -> {entry.new_verdict}"
+            else:
+                continue
+            print(f"{prefix}  {detail}")
         print()
 
-    # Summary
-    print(f"  {'─' * 48}")
-
-    if report.has_critical:
-        print(f"  {R}{B}{report.total_dangers} critical threat(s) found. Action required.{RST}")
-    elif report.total_toxic_flows > 0:
-        print(f"  {Y}{report.total_toxic_flows} toxic flow(s) detected. Review recommended.{RST}")
-    elif report.total_warnings > 0:
-        print(f"  {Y}{report.total_warnings} warning(s) found. Review recommended.{RST}")
-    else:
-        print(f"  {G}No threats detected. Your machine looks clean.{RST}")
-
-    # Action items
+    # Actions
     actions = report.all_actions
-    # Add toxic flow remediations
     for flow in report.toxic_flows:
         actions.append(flow.remediation)
     if actions:
         print()
-        print(f"  {B}ACTIONS NEEDED:{RST}")
+        print(f"  {B}ACTIONS{RST}")
         for i, action in enumerate(actions, 1):
             print(f"  {i}. {action}")
 
     print()
-    print(f"  {D}Scan completed in {report.duration_seconds:.1f} seconds.{RST}")
+    print(f"  {D}Completed in {report.duration_seconds:.1f}s{RST}")
     print()
 
     # Save if requested
@@ -1253,9 +1628,8 @@ def _run_guard(args):
         print(f"  {D}Results saved to {args.save}{RST}")
         print()
 
-    # Exit code: 1 if critical threats found
-    if report.has_critical:
-        sys.exit(1)
+    # Exit code: determined by project config or default critical check
+    sys.exit(_exit_code())
 
 
 def _run_scan_mcp(args):

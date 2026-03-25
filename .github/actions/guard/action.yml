@@ -1,0 +1,43 @@
+name: "AgentSeal Guard"
+description: "Scan your project for AI agent security risks"
+branding:
+  icon: "shield"
+  color: "blue"
+inputs:
+  path:
+    description: "Directory to scan"
+    required: false
+    default: "."
+  config:
+    description: "Path to .agentseal.yaml config"
+    required: false
+  fail-on:
+    description: "Verdict threshold for failure (danger|warning|safe)"
+    required: false
+    default: "danger"
+  no-registry:
+    description: "Skip registry API enrichment"
+    required: false
+    default: "false"
+  verbose:
+    description: "Show all items including safe"
+    required: false
+    default: "false"
+outputs:
+  sarif-file:
+    description: "Path to generated SARIF file"
+  total-dangers:
+    description: "Number of DANGER findings"
+  total-warnings:
+    description: "Number of WARNING findings"
+  exit-code:
+    description: "Guard exit code (0=pass, 1=fail)"
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ inputs.path }}
+    - ${{ inputs.config }}
+    - ${{ inputs.fail-on }}
+    - ${{ inputs.no-registry }}
+    - ${{ inputs.verbose }}

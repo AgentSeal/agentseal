@@ -7,6 +7,7 @@ visible to existing detection patterns. Stdlib only: re, base64, unicodedata.
 from __future__ import annotations
 
 import base64
+import html as _html_mod
 import re
 import unicodedata
 
@@ -22,6 +23,7 @@ __all__ = [
     "decode_base64_blocks",
     "unescape_sequences",
     "expand_string_concat",
+    "decode_html_entities",
 ]
 
 # Zero-width and invisible characters to strip.
@@ -98,9 +100,55 @@ def has_invisible_chars(text: str) -> bool:
     return bool(_INVISIBLE_CHARS.search(text))
 
 
+# Unicode confusable mapping (TR39 skeleton subset).
+# Maps visually similar characters from Cyrillic, Greek, Cherokee, etc.
+# to their Latin equivalents. NFKC does NOT handle these.
+_CONFUSABLES: dict[str, str] = {
+    "\u0410": "A", "\u0412": "B", "\u0421": "C", "\u0415": "E",  # Cyrillic uppercase
+    "\u041d": "H", "\u0406": "I", "\u0408": "J", "\u041a": "K",
+    "\u041c": "M", "\u041e": "O", "\u0420": "P", "\u0405": "S",
+    "\u0422": "T", "\u0425": "X", "\u0423": "Y", "\u0417": "Z",
+    "\u0430": "a", "\u0441": "c", "\u0435": "e", "\u04bb": "h",  # Cyrillic lowercase
+    "\u0456": "i", "\u0458": "j", "\u043e": "o", "\u0440": "p",
+    "\u0455": "s", "\u0445": "x", "\u0443": "y",
+    "\u0391": "A", "\u0392": "B", "\u0395": "E", "\u0397": "H",  # Greek uppercase
+    "\u0399": "I", "\u039a": "K", "\u039c": "M", "\u039d": "N",
+    "\u039f": "O", "\u03a1": "P", "\u03a4": "T", "\u03a7": "X",
+    "\u03a5": "Y", "\u0396": "Z",
+    "\u03bf": "o", "\u03b1": "a",                                  # Greek lowercase
+    "\u13a0": "D", "\u13a1": "R", "\u13a2": "T", "\u13aa": "G",  # Cherokee
+    "\u13b3": "W", "\u13d2": "S", "\u13da": "S",
+    "\uab4e": "s", "\uab4f": "s", "\uaba3": "s", "\uabaa": "s",    # Cherokee lowercase
+    "\u0131": "i",                                                  # Turkish dotless i
+    "\u1d00": "A", "\u0299": "B", "\u1d04": "C",                  # Small caps
+    "\uff21": "A", "\uff22": "B", "\uff23": "C", "\uff24": "D",  # Fullwidth Latin
+    "\uff25": "E", "\uff26": "F", "\uff27": "G", "\uff28": "H",
+    "\uff29": "I", "\uff2a": "J", "\uff2b": "K", "\uff2c": "L",
+    "\uff2d": "M", "\uff2e": "N", "\uff2f": "O", "\uff30": "P",
+    "\uff31": "Q", "\uff32": "R", "\uff33": "S", "\uff34": "T",
+    "\uff35": "U", "\uff36": "V", "\uff37": "W", "\uff38": "X",
+    "\uff39": "Y", "\uff3a": "Z",
+    "\uff41": "a", "\uff42": "b", "\uff43": "c", "\uff44": "d",  # Fullwidth lowercase
+    "\uff45": "e", "\uff46": "f", "\uff47": "g", "\uff48": "h",
+    "\uff49": "i", "\uff4a": "j", "\uff4b": "k", "\uff4c": "l",
+    "\uff4d": "m", "\uff4e": "n", "\uff4f": "o", "\uff50": "p",
+    "\uff51": "q", "\uff52": "r", "\uff53": "s", "\uff54": "t",
+    "\uff55": "u", "\uff56": "v", "\uff57": "w", "\uff58": "x",
+    "\uff59": "y", "\uff5a": "z",
+}
+
+_CONFUSABLES_TABLE = str.maketrans(_CONFUSABLES)
+
+
 def normalize_unicode(text: str) -> str:
-    """Apply NFKC unicode normalization."""
-    return unicodedata.normalize("NFKC", text)
+    """Apply NFKC normalization + TR39 confusable mapping.
+
+    NFKC handles compatibility characters but misses Cyrillic/Greek/Cherokee
+    lookalikes. The confusable table catches ~/.ꮪꮪh -> ~/.ssh, etc.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = text.translate(_CONFUSABLES_TABLE)
+    return text
 
 
 def _is_printable_text(data: bytes) -> bool:
@@ -185,28 +233,38 @@ def expand_string_concat(text: str) -> str:
     return text
 
 
-def deobfuscate(text: str) -> str:
-    """Apply all deobfuscation transforms to text.
+def decode_html_entities(text: str) -> str:
+    """Decode HTML entities: &#99;&#117;&#114;&#108; -> curl.
 
-    Returns cleaned text for regex pattern matching.
-    Transforms applied in order:
-    1. strip_zero_width - Remove zero-width unicode characters
-    2. strip_tag_chars - Remove Unicode Tag Characters (ASCII smuggling)
-    3. strip_variation_selectors - Remove Variation Selectors
-    4. strip_bidi_controls - Remove BiDi control characters
-    5. strip_html_comments - Remove HTML comments with hidden instructions
-    6. normalize_unicode - NFKC normalization (homoglyphs -> ASCII)
-    7. decode_base64_blocks - Find and decode inline base64 strings
-    8. unescape_sequences - Convert \\x and \\u escapes to characters
-    9. expand_string_concat - Join adjacent string literals
+    Catches both numeric (&#99;, &#x63;) and named (&amp;, &lt;) entities.
     """
+    return _html_mod.unescape(text)
+
+
+def _deobfuscate_pass(text: str) -> str:
+    """Single pass of deobfuscation transforms."""
     text = strip_zero_width(text)
     text = strip_tag_chars(text)
     text = strip_variation_selectors(text)
     text = strip_bidi_controls(text)
     text = strip_html_comments(text)
+    text = decode_html_entities(text)
     text = normalize_unicode(text)
     text = decode_base64_blocks(text)
     text = unescape_sequences(text)
     text = expand_string_concat(text)
+    return text
+
+
+def deobfuscate(text: str) -> str:
+    """Apply all deobfuscation transforms to text (2-pass).
+
+    Two passes catch layered obfuscation: e.g. base64-encoded content that
+    itself contains zero-width chars or escape sequences. The first pass
+    decodes base64, the second pass strips the revealed hidden content.
+
+    Returns cleaned text for regex pattern matching.
+    """
+    text = _deobfuscate_pass(text)
+    text = _deobfuscate_pass(text)
     return text

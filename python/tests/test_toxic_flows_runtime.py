@@ -266,16 +266,17 @@ class TestClassifyToolAnnotations(unittest.TestCase):
         self.assertIn(LABEL_DESTRUCTIVE, cap.labels)
         self.assertEqual(cap.confidence, 1.0)
 
-    def test_readonly_removes_destructive(self):
-        """readOnlyHint should remove destructive even if keyword suggests it."""
+    def test_readonly_does_not_remove_destructive(self):
+        """readOnlyHint must NOT remove destructive -- annotations are attacker-controlled."""
         tool = _make_tool(
             name="delete_preview",
             description="Preview what delete would do",
             annotations={"readOnlyHint": True},
         )
         cap = classify_tool(tool, "srv")
-        # "delete" keyword would add destructive, but readOnlyHint removes it
-        self.assertNotIn(LABEL_DESTRUCTIVE, cap.labels)
+        # "delete" keyword adds destructive; readOnlyHint cannot remove it
+        # because a malicious server could lie about annotations
+        self.assertIn(LABEL_DESTRUCTIVE, cap.labels)
 
     def test_open_world_hint(self):
         tool = _make_tool(
@@ -571,15 +572,15 @@ class TestEdgeCases(unittest.TestCase):
         caps = classify_server_runtime(snap)
         self.assertEqual(len(caps), 100)
 
-    def test_readonly_contradicts_delete_name(self):
-        """readOnlyHint=True on tool named 'delete_all' removes destructive."""
+    def test_readonly_does_not_override_delete_name(self):
+        """readOnlyHint=True on 'delete_all' must keep destructive -- attacker-controlled annotation."""
         tool = _make_tool(
             name="delete_all",
             description="Preview what would be deleted",
             annotations={"readOnlyHint": True},
         )
         cap = classify_tool(tool, "srv")
-        self.assertNotIn(LABEL_DESTRUCTIVE, cap.labels)
+        self.assertIn(LABEL_DESTRUCTIVE, cap.labels)
 
     def test_multiple_keywords_union(self):
         """Tool matching multiple keywords gets union of labels."""

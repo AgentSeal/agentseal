@@ -32,7 +32,9 @@ def _config_fingerprint(server: dict) -> str:
     """Compute a deterministic hash of a server's config fields.
 
     Hashes: command, sorted args, sorted env keys (not values - they may
-    contain secrets that rotate).
+    contain secrets that rotate), url, and sorted header keys.
+    An attacker could swap the url to a malicious endpoint without changing
+    command/args, so url MUST be part of the fingerprint.
     """
     cmd = server.get("command", "")
     cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
@@ -40,6 +42,8 @@ def _config_fingerprint(server: dict) -> str:
         cmd_str,
         json.dumps(sorted(str(a) for a in server.get("args", []) if isinstance(a, str))),
         json.dumps(sorted(str(k) for k in server.get("env", {}) if isinstance(k, str))),
+        server.get("url", ""),
+        json.dumps(sorted(str(k) for k in server.get("headers", {}) if isinstance(k, str))),
     ]
     return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
