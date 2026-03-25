@@ -7,7 +7,28 @@ import { fromOllama } from "../src/providers/ollama.js";
 import { generateRemediation } from "../src/remediation.js";
 import { compareReports } from "../src/compare.js";
 import type { ScanReport } from "../src/types.js";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+import { Guard } from "../src/guard.js";
+import {
+  resolveProjectConfig,
+  runGuardInit,
+  shouldFail,
+} from "../src/project-config.js";
+import { RuleEngine } from "../src/rules.js";
+import { BaselineStore } from "../src/baselines.js";
+import {
+  guardReportFromDict,
+  totalDangers,
+  totalWarnings,
+  totalSafe,
+  type GuardReport,
+  type SkillResult,
+  type MCPServerResult,
+  type CustomFinding,
+  type DeltaEntry,
+} from "../src/guard-models.js";
+import { computeDelta, HistoryStore } from "../src/history.js";
 
 const VERSION = "0.1.0";
 
@@ -313,6 +334,413 @@ program
           console.log(`  \x1b[32m↑\x1b[0m ${r.probe_id} — now ${r.verdict}`);
         }
       }
+    }
+  });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GUARD — Terminal renderer
+// ═══════════════════════════════════════════════════════════════════════════
+
+function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function col(s: string, width: number): string {
+  return s + " ".repeat(Math.max(0, width - stripAnsi(s).length));
+}
+
+function verdictColor(verdict: string): string {
+  const R = "\x1b[0m";
+  switch (verdict) {
+    case "safe": return `\x1b[32m${verdict.toUpperCase()}${R}`;
+    case "warning": return `\x1b[33m${verdict.toUpperCase()}${R}`;
+    case "danger": return `\x1b[31m${verdict.toUpperCase()}${R}`;
+    case "error": return `\x1b[90m${verdict.toUpperCase()}${R}`;
+    default: return verdict.toUpperCase();
+  }
+}
+
+function severityColor(severity: string): string {
+  const R = "\x1b[0m";
+  switch (severity) {
+    case "critical": return `\x1b[31m${severity}${R}`;
+    case "high": return `\x1b[31m${severity}${R}`;
+    case "medium": return `\x1b[33m${severity}${R}`;
+    case "low": return `\x1b[90m${severity}${R}`;
+    default: return severity;
+  }
+}
+
+interface RenderOpts {
+  verbose?: boolean;
+  config?: ReturnType<typeof resolveProjectConfig>;
+  delta?: { total_new: number; total_resolved: number; total_changed: number; entries: DeltaEntry[] } | null;
+}
+
+function renderGuardTerminal(report: GuardReport, opts: RenderOpts = {}): void {
+  const R = "\x1b[0m";
+  const C = "\x1b[36m";
+  const B = "\x1b[1m";
+  const D = "\x1b[90m";
+  const G = "\x1b[32m";
+  const Y = "\x1b[33m";
+  const RED = "\x1b[31m";
+
+  // Header
+  console.log();
+  console.log(`  ${C}${B}AgentSeal Guard${R} ${D}— Machine Security Scan${R}`);
+  console.log(`  ${D}${"─".repeat(50)}${R}`);
+  console.log();
+
+  // AGENTS section
+  const agents = report.agents_found ?? [];
+  if (agents.length > 0) {
+    console.log(`  ${C}${B}AGENTS${R}`);
+    console.log(`  ${col(D + "NAME" + R, 30)} ${D}STATUS${R}`);
+    for (const a of agents) {
+      const status = a.status === "found" || a.status === "installed_no_config"
+        ? `${G}installed${R}`
+        : `${D}${a.status}${R}`;
+      console.log(`  ${col(a.name, 30)} ${status}`);
+    }
+    console.log();
+  }
+
+  // SKILLS section
+  const skills = report.skill_results ?? [];
+  const dangerOrWarnSkills = opts.verbose
+    ? skills
+    : skills.filter((s) => s.verdict !== "safe");
+  if (dangerOrWarnSkills.length > 0 || (opts.verbose && skills.length > 0)) {
+    console.log(`  ${C}${B}SKILLS${R}`);
+    console.log(`  ${col(D + "NAME" + R, 24)} ${col(D + "VERDICT" + R, 16)} ${col(D + "SEVERITY" + R, 14)} ${D}FINDING${R}`);
+    const toShow = opts.verbose ? skills : dangerOrWarnSkills;
+    for (const s of toShow) {
+      const topFinding = s.findings[0];
+      const sev = topFinding ? severityColor(topFinding.severity) : `${D}-${R}`;
+      const finding = topFinding ? topFinding.title : (s.verdict === "safe" ? `${G}No issues${R}` : "-");
+      console.log(`  ${col(s.name, 24)} ${col(verdictColor(s.verdict), 16)} ${col(sev, 14)} ${finding}`);
+      if (opts.verbose && s.findings.length > 1) {
+        for (const f of s.findings.slice(1)) {
+          console.log(`  ${col("", 24)} ${col("", 16)} ${col(severityColor(f.severity), 14)} ${f.title}`);
+        }
+      }
+    }
+    if (!opts.verbose && skills.length > dangerOrWarnSkills.length) {
+      const safeCount = skills.length - dangerOrWarnSkills.length;
+      console.log(`  ${D}  ... ${safeCount} safe skill(s) hidden (use --verbose)${R}`);
+    }
+    console.log();
+  }
+
+  // MCP SERVERS section
+  const mcps = report.mcp_results ?? [];
+  const hasRegistryScores = mcps.some((m) => m.registry_score !== undefined && m.registry_score !== null);
+  const dangerOrWarnMcps = opts.verbose
+    ? mcps
+    : mcps.filter((m) => m.verdict !== "safe");
+  if (dangerOrWarnMcps.length > 0 || (opts.verbose && mcps.length > 0)) {
+    console.log(`  ${C}${B}MCP SERVERS${R}`);
+    let header = `  ${col(D + "NAME" + R, 24)} ${col(D + "VERDICT" + R, 16)} ${col(D + "SEVERITY" + R, 14)}`;
+    if (hasRegistryScores) header += ` ${col(D + "REGISTRY" + R, 12)}`;
+    header += ` ${D}FINDING${R}`;
+    console.log(header);
+    const toShow = opts.verbose ? mcps : dangerOrWarnMcps;
+    for (const m of toShow) {
+      const topFinding = m.findings[0];
+      const sev = topFinding ? severityColor(topFinding.severity) : `${D}-${R}`;
+      const finding = topFinding ? topFinding.title : (m.verdict === "safe" ? `${G}No issues${R}` : "-");
+      let line = `  ${col(m.name, 24)} ${col(verdictColor(m.verdict), 16)} ${col(sev, 14)}`;
+      if (hasRegistryScores) {
+        const score = m.registry_score !== undefined && m.registry_score !== null
+          ? `${m.registry_score}/100`
+          : `${D}-${R}`;
+        line += ` ${col(String(score), 12)}`;
+      }
+      line += ` ${finding}`;
+      console.log(line);
+      if (opts.verbose && m.findings.length > 1) {
+        for (const f of m.findings.slice(1)) {
+          let extra = `  ${col("", 24)} ${col("", 16)} ${col(severityColor(f.severity), 14)}`;
+          if (hasRegistryScores) extra += ` ${col("", 12)}`;
+          extra += ` ${f.title}`;
+          console.log(extra);
+        }
+      }
+    }
+    if (!opts.verbose && mcps.length > dangerOrWarnMcps.length) {
+      const safeCount = mcps.length - dangerOrWarnMcps.length;
+      console.log(`  ${D}  ... ${safeCount} safe server(s) hidden (use --verbose)${R}`);
+    }
+    console.log();
+  }
+
+  // CUSTOM RULES section
+  const custom = report.custom_findings ?? [];
+  if (custom.length > 0) {
+    console.log(`  ${C}${B}CUSTOM RULES${R}`);
+    console.log(`  ${col(D + "NAME" + R, 24)} ${col(D + "VERDICT" + R, 16)} ${col(D + "SEVERITY" + R, 14)} ${D}FINDING${R}`);
+    for (const c of custom) {
+      console.log(`  ${col(c.entity_name, 24)} ${col(verdictColor(c.verdict), 16)} ${col(severityColor(c.severity), 14)} ${c.title}`);
+    }
+    console.log();
+  }
+
+  // POLICY section
+  const config = opts.config;
+  if (config) {
+    console.log(`  ${C}${B}POLICY${R}`);
+    console.log(`  ${D}config:${R}    ${config.config_path}`);
+    console.log(`  ${D}fail_on:${R}   ${config.fail_on}`);
+    if (config.allowed_agents.length > 0) {
+      console.log(`  ${D}agents:${R}    ${config.allowed_agents.join(", ")}`);
+    }
+    if (config.allowed_mcp_servers.length > 0) {
+      console.log(`  ${D}mcp:${R}       ${config.allowed_mcp_servers.join(", ")}`);
+    }
+    console.log();
+  }
+
+  // DELTA section
+  const delta = opts.delta;
+  if (delta && (delta.total_new > 0 || delta.total_resolved > 0 || delta.total_changed > 0)) {
+    console.log(`  ${C}${B}DELTA${R} ${D}(vs previous scan)${R}`);
+    console.log(`  ${RED}+${delta.total_new} new${R}  ${G}-${delta.total_resolved} resolved${R}  ${Y}~${delta.total_changed} changed${R}`);
+    for (const e of delta.entries.slice(0, 10)) {
+      const prefix = e.change_type === "new" || e.change_type === "new_entity"
+        ? `${RED}+${R}`
+        : e.change_type === "resolved" || e.change_type === "removed_entity"
+          ? `${G}-${R}`
+          : `${Y}~${R}`;
+      const label = e.code ? `${e.code}: ${e.title ?? ""}` : e.entity_name;
+      console.log(`    ${prefix} [${e.entity_type}] ${label}`);
+    }
+    if (delta.entries.length > 10) {
+      console.log(`  ${D}  ... ${delta.entries.length - 10} more entries${R}`);
+    }
+    console.log();
+  }
+
+  // Summary box
+  const dangers = totalDangers(report);
+  const warnings = totalWarnings(report);
+  const safe = totalSafe(report);
+
+  console.log(`  ${D}${"─".repeat(50)}${R}`);
+  const summaryParts = [];
+  if (dangers > 0) summaryParts.push(`${RED}${B}${dangers} DANGER${R}`);
+  if (warnings > 0) summaryParts.push(`${Y}${B}${warnings} WARNING${R}`);
+  summaryParts.push(`${G}${B}${safe} SAFE${R}`);
+  console.log(`  ${summaryParts.join("  ")}  ${D}(${report.duration_seconds.toFixed(1)}s)${R}`);
+  console.log();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GUARD COMMAND
+// ═══════════════════════════════════════════════════════════════════════════
+
+const guardCmd = program
+  .command("guard")
+  .description("Scan machine for AI agent security issues")
+  .argument("[path]", "directory to scan (default: entire machine)")
+  .option("--verbose", "show all findings")
+  .option("--no-registry", "skip agentseal.org enrichment")
+  .option("--no-diff", "skip delta comparison")
+  .option("--from-json <path>", "re-render saved JSON report")
+  .option("--fail-on <level>", "exit code threshold: danger|warning|safe")
+  .option("--rules <path>", "custom YAML rules path")
+  .option("--config <path>", "explicit .agentseal.yaml path")
+  .option("-o, --output <format>", "output format: terminal|json|sarif", "terminal")
+  .option("--save <path>", "save JSON report to file")
+  .option("--reset-baselines", "re-trust all MCP servers")
+  .action(async (scanPath: string | undefined, opts: Record<string, any>) => {
+    try {
+      // Handle --reset-baselines
+      if (opts.resetBaselines) {
+        const store = new BaselineStore();
+        const count = store.reset();
+        console.log(`Reset ${count} baseline(s). All MCP servers will be re-trusted on next scan.`);
+        return;
+      }
+
+      // Handle --from-json: re-render a saved report
+      if (opts.fromJson) {
+        const data = JSON.parse(readFileSync(opts.fromJson, "utf-8"));
+        const report = guardReportFromDict(data);
+        if (opts.output === "json") {
+          console.log(JSON.stringify(report, null, 2));
+        } else if (opts.output === "sarif") {
+          // Basic SARIF-compatible output
+          console.log(JSON.stringify({ $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json", version: "2.1.0", runs: [{ tool: { driver: { name: "agentseal-guard" } }, results: report }] }, null, 2));
+        } else {
+          renderGuardTerminal(report, { verbose: opts.verbose });
+        }
+        return;
+      }
+
+      // Resolve project config
+      const config = resolveProjectConfig({
+        configPath: opts.config,
+        searchDir: scanPath,
+      });
+
+      // Resolve rules paths
+      const rulesPaths: string[] = [];
+      if (opts.rules) {
+        rulesPaths.push(opts.rules);
+      }
+
+      // Run the guard scan
+      const guard = new Guard({
+        scanPath,
+        verbose: opts.verbose,
+        noRegistry: opts.registry === false,
+        noDiff: opts.diff === false,
+        config: config ?? undefined,
+        rulesPaths: rulesPaths.length > 0 ? rulesPaths : undefined,
+        onProgress: (phase, detail) => {
+          if (opts.output === "terminal") {
+            process.stderr.write(`\x1b[90m  [${phase}] ${detail}\x1b[0m\n`);
+          }
+        },
+      });
+
+      const report = await guard.run();
+
+      // Compute delta if diff is enabled
+      let delta: { total_new: number; total_resolved: number; total_changed: number; entries: DeltaEntry[] } | null = null;
+      if (opts.diff !== false) {
+        try {
+          const store = new HistoryStore();
+          const prev = store.loadPrevious(scanPath);
+          if (prev) {
+            const deltaResult = computeDelta(report, prev, scanPath);
+            delta = {
+              total_new: deltaResult.total_new,
+              total_resolved: deltaResult.total_resolved,
+              total_changed: deltaResult.total_changed,
+              entries: deltaResult.entries,
+            };
+          }
+          store.close();
+        } catch {
+          // History is best-effort
+        }
+      }
+
+      // Output
+      if (opts.output === "json") {
+        console.log(JSON.stringify(report, null, 2));
+      } else if (opts.output === "sarif") {
+        console.log(JSON.stringify({
+          $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+          version: "2.1.0",
+          runs: [{
+            tool: { driver: { name: "agentseal-guard", version: VERSION } },
+            results: report,
+          }],
+        }, null, 2));
+      } else {
+        renderGuardTerminal(report, {
+          verbose: opts.verbose,
+          config: config ?? undefined,
+          delta,
+        });
+      }
+
+      // Save report
+      if (opts.save) {
+        writeFileSync(opts.save, JSON.stringify(report, null, 2));
+        console.log(`Report saved to ${opts.save}`);
+      }
+
+      // Exit code
+      const failLevel = opts.failOn ?? config?.fail_on ?? "danger";
+      const hasDanger = totalDangers(report) > 0;
+      const hasWarning = totalWarnings(report) > 0;
+      if (shouldFail(failLevel, { hasDanger, hasWarning })) {
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`Error: ${err}`);
+      process.exit(2);
+    }
+  });
+
+// ─── guard init ───
+
+guardCmd
+  .command("init")
+  .description("Initialize .agentseal.yaml config")
+  .option("--force", "overwrite existing config")
+  .action((opts: Record<string, any>) => {
+    try {
+      const written = runGuardInit({ force: opts.force });
+      if (written) {
+        console.log("\x1b[32mCreated .agentseal.yaml\x1b[0m");
+        console.log("  Edit allowed_agents and allowed_mcp_servers to match your setup.");
+      } else {
+        console.log("\x1b[33m.agentseal.yaml already exists.\x1b[0m Use --force to overwrite.");
+      }
+    } catch (err) {
+      console.error(`Error: ${err}`);
+      process.exit(2);
+    }
+  });
+
+// ─── guard test ───
+
+guardCmd
+  .command("test")
+  .description("Run self-tests on custom rules")
+  .option("--rules <path>", "rules path (default: .agentseal/rules/)")
+  .action((opts: Record<string, any>) => {
+    try {
+      const R = "\x1b[0m";
+      const G = "\x1b[32m";
+      const RED = "\x1b[31m";
+      const B = "\x1b[1m";
+
+      // Resolve rules path
+      const rulesPath = opts.rules ?? ".agentseal/rules";
+      if (!existsSync(rulesPath)) {
+        console.error(`Rules path not found: ${rulesPath}`);
+        console.error("Create custom rules in .agentseal/rules/ or specify --rules <path>");
+        process.exit(2);
+      }
+
+      const engine = RuleEngine.fromPaths([rulesPath]);
+      const results = engine.runTests();
+
+      if (results.length === 0) {
+        console.log("No tests found in rules. Add 'tests:' entries to your rule YAML files.");
+        return;
+      }
+
+      console.log(`\n  ${B}Rule Tests${R}\n`);
+
+      let passed = 0;
+      let failed = 0;
+      for (const r of results) {
+        if (r.passed) {
+          console.log(`  ${G}PASS${R} ${r.rule_id} / ${r.test_name}`);
+          passed++;
+        } else {
+          console.log(`  ${RED}FAIL${R} ${r.rule_id} / ${r.test_name}  (expected: ${r.expected}, got: ${r.actual})`);
+          failed++;
+        }
+      }
+
+      console.log();
+      console.log(`  ${passed} passed, ${failed} failed`);
+      console.log();
+
+      if (failed > 0) {
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`Error: ${err}`);
+      process.exit(2);
     }
   });
 
