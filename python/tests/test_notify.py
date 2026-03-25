@@ -61,25 +61,26 @@ class TestNotifierMacOS:
             assert result is True
             mock_run.assert_called_once()
             cmd = mock_run.call_args[0][0]
-            assert cmd[0] == "osascript"
-            assert "Test Title" in cmd[2]
-            assert "Test Message" in cmd[2]
+            assert cmd[0] == "swift"
+            swift_code = mock_run.call_args.kwargs["input"]
+            assert "Test Title" in swift_code
+            assert "Test Message" in swift_code
 
     def test_macos_urgent_includes_sound(self):
         n = Notifier(enabled=True, min_interval=0.0)
         n._platform = "Darwin"
         with patch("subprocess.run") as mock_run:
             n.notify("Title", "Msg", urgent=True)
-            script = mock_run.call_args[0][0][2]
-            assert "Basso" in script
+            swift_code = mock_run.call_args.kwargs["input"]
+            assert "Basso" in swift_code
 
     def test_macos_escapes_quotes(self):
         n = Notifier(enabled=True, min_interval=0.0)
         n._platform = "Darwin"
         with patch("subprocess.run") as mock_run:
             n.notify('Has "quotes"', 'Message with "quotes"')
-            script = mock_run.call_args[0][0][2]
-            assert '\\"' in script
+            swift_code = mock_run.call_args.kwargs["input"]
+            assert '\\"' in swift_code
 
     def test_macos_falls_back_on_timeout(self):
         n = Notifier(enabled=True, min_interval=0.0)

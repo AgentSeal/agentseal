@@ -182,6 +182,11 @@ class TestCLIMenubarFlag:
 
 @pytest.mark.skipif(not _HAS_RUMPS, reason="rumps not installed")
 class TestShieldMenuBarApp:
+    @pytest.fixture(autouse=True)
+    def _no_icon(self):
+        with patch("agentseal.shield_menubar._find_icon", return_value=None):
+            yield
+
     def test_init_creates_menu_items(self):
         """App should initialize with correct menu structure."""
         from agentseal.shield_menubar import ShieldMenuBarApp
@@ -212,7 +217,10 @@ class TestShieldMenuBarApp:
         mock_sender = MagicMock()
         mock_sender.state = 0
 
-        with patch.object(app, '_stop_shield'), patch.object(app, '_start_shield'):
+        def _fake_start():
+            app._shield = MagicMock()  # simulate successful shield start
+
+        with patch.object(app, '_stop_shield'), patch.object(app, '_start_shield', side_effect=_fake_start):
             app._toggle_pause(mock_sender)
             assert app._paused is True
             assert mock_sender.state == 1
