@@ -159,6 +159,30 @@ export {
 // Notifier
 export { Notifier } from "./notify.js";
 
+// Project config
+export {
+  loadProjectConfig, resolveProjectConfig,
+  shouldIgnorePath, shouldIgnoreFinding, shouldFail,
+  generateUnlistedFindings, generateConfigYaml, runGuardInit,
+  type ProjectConfig, type IgnoreFindingEntry,
+} from "./project-config.js";
+
+// Registry client
+export {
+  slugify, extractPackageSlug, bulkCheck, enrichMcpResults,
+} from "./registry-client.js";
+
+// Rules engine
+export {
+  fnmatchCase, RuleEngine,
+  type Rule, type RuleTest, type RuleTestResult,
+} from "./rules.js";
+
+// History & delta
+export {
+  normalizeSkillPath, HistoryStore, computeDelta,
+} from "./history.js";
+
 // Shield
 export {
   Shield, DebouncedHandler, classifyPath, collectWatchPaths,

@@ -298,7 +298,7 @@ export class RuleEngine {
           remediation: rule.remediation,
           rule_file: rule.source_file,
           entity_type: "mcp",
-          entity_name: entityData.name,
+          entity_name: entityData.name ?? "",
         });
       }
     }
@@ -333,7 +333,7 @@ export class RuleEngine {
           remediation: rule.remediation,
           rule_file: rule.source_file,
           entity_type: "skill",
-          entity_name: entityData.name,
+          entity_name: entityData.name ?? "",
         });
       }
     }
@@ -367,7 +367,7 @@ export class RuleEngine {
           remediation: rule.remediation,
           rule_file: rule.source_file,
           entity_type: "agent",
-          entity_name: entityData.name,
+          entity_name: entityData.name ?? "",
         });
       }
     }
