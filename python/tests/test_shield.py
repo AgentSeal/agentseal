@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agentseal.guard_models import GuardVerdict, SkillResult, MCPServerResult, MCPFinding
+pytest.importorskip("watchdog", reason="watchdog not installed (optional dependency)")
+
 from agentseal.shield import (
     Shield,
     _classify_path,
