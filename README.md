@@ -82,16 +82,39 @@ agentseal guard
 
 ```
 SKILLS
-[XX] sketchy-rules         MALWARE  Credential access
-     Remove this skill immediately and rotate all credentials.
-[OK] 4 more safe skills
+  sketchy-rules         MALWARE  Credential access
+  Remove this skill immediately and rotate all credentials.
+  4 more safe skills
 
-MCP SERVERS
-[XX] filesystem            DANGER   Access to SSH private keys
-     Restrict filesystem MCP server: remove .ssh from allowed paths.
+MCP SERVERS                                       REGISTRY
+  filesystem            DANGER   SSH key access    42 RISKY
+  Restrict filesystem MCP server: remove .ssh from allowed paths.
 
 TOXIC FLOWS
-[HIGH] Data exfiltration path: filesystem + slack
+  Data exfiltration path: filesystem + slack       HIGH
+
+BASELINE CHANGES (since last scan)
+  + new-mcp-server      NEW      Added since last scan
+  ~ filesystem          CHANGED  Args modified
+
+SUMMARY
+  Critical: 1  High: 2  Medium: 0  Low: 1         STATUS: DANGER
+```
+
+### What's new in v0.8
+
+- **Project config** (`agentseal guard init`) — generate `.agentseal.yaml` to define allowed agents, MCP servers, and custom rules
+- **Delta scanning** — detect rug-pulls and config changes since your last scan (SQLite-backed baselines)
+- **Registry enrichment** — live trust scores from the [MCP Security Registry](https://agentseal.org/mcp) (6,600+ servers)
+- **Custom rules** — write YAML rules to enforce org-specific policies, with `agentseal guard test` to validate them
+- **GitHub Action** — run guard in CI with SARIF upload for GitHub Security tab
+- **Output formats** — terminal (default), JSON, SARIF, HTML
+
+```bash
+agentseal guard init             # generate .agentseal.yaml policy
+agentseal guard --output sarif   # CI/CD integration
+agentseal guard --no-diff        # skip delta section
+agentseal guard test             # run custom rule tests
 ```
 
 ### Detection pipeline
@@ -99,16 +122,20 @@ TOXIC FLOWS
 ```mermaid
 graph LR
     IN["Skill Files\nMCP Configs"] --> P["Pattern\nSignatures"]
-    P --> D["Deobfuscation\n(Unicode Tags,\nBase64, BiDi, ZWC)"]
+    P --> D["Deobfuscation\n(Unicode Tags,\nBase64, BiDi,\nZWC, TR39)"]
     D --> S["Semantic\nAnalysis\n(MiniLM-L6-v2)"]
     S --> B["Baseline\nTracking\n(SHA-256)"]
-    B --> OUT["Report +\nSeverity"]
+    B --> R["Registry\nEnrichment"]
+    R --> RU["Custom\nRules"]
+    RU --> OUT["Report +\nSeverity"]
 
     style IN fill:#1a1a2e,stroke:#58a6ff,color:#e6edf3
     style P fill:#161b22,stroke:#30363d,color:#e6edf3
     style D fill:#161b22,stroke:#30363d,color:#e6edf3
     style S fill:#161b22,stroke:#30363d,color:#e6edf3
     style B fill:#161b22,stroke:#30363d,color:#e6edf3
+    style R fill:#161b22,stroke:#30363d,color:#e6edf3
+    style RU fill:#161b22,stroke:#30363d,color:#e6edf3
     style OUT fill:#0d4429,stroke:#22c55e,color:#e6edf3
 ```
 
@@ -209,7 +236,7 @@ Exit code 1 if trust score is below threshold. SARIF output supported via `--out
 
 ## MCP Security Registry
 
-2,200+ MCP servers scanned for security risks. Trust scores, tool analysis, and finding details for each server.
+6,600+ MCP servers scanned for security risks. Trust scores, tool analysis, and finding details for each server.
 
 **[agentseal.org/mcp](https://agentseal.org/mcp)**
 

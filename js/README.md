@@ -7,7 +7,7 @@
 
 **Find out if your AI agent can be hacked** - before someone else does.
 
-AgentSeal tests your agent's system prompt against 225+ attack probes (extraction + injection) and gives you a deterministic trust score. No AI judge. Same input, same result, every time.
+AgentSeal tests your agent's system prompt against 225+ attack probes (extraction + injection) and gives you a deterministic trust score. No AI judge. Same input, same result, every time. Guard v0.8: project config, delta scanning, registry enrichment, custom rules, and GitHub Action support.
 
 ```bash
 npm install agentseal
