@@ -115,8 +115,16 @@ export class MCPConfigChecker {
   /** Check a single MCP server config dict for security issues. */
   check(server: Record<string, any>): MCPServerResult {
     const name: string = server.name ?? "unknown";
-    const command: string = server.command ?? "";
-    const args: any[] = server.args ?? [];
+    const rawCmd = server.command ?? "";
+    let command: string;
+    let args: any[];
+    if (Array.isArray(rawCmd)) {
+      command = String(rawCmd[0] ?? "");
+      args = [...rawCmd.slice(1).map(String), ...(server.args ?? [])];
+    } else {
+      command = String(rawCmd);
+      args = server.args ?? [];
+    }
     const env: Record<string, any> = server.env ?? {};
     const source: string = server.source_file ?? "";
     const url: string = server.url ?? "";
@@ -503,8 +511,16 @@ export class MCPConfigChecker {
 
   private _checkKnownCVEs(name: string, server: Record<string, any>): MCPFinding[] {
     const findings: MCPFinding[] = [];
-    const command: string = server.command ?? "";
-    const args: any[] = server.args ?? [];
+    const rawCmd2 = server.command ?? "";
+    let command: string;
+    let args: any[];
+    if (Array.isArray(rawCmd2)) {
+      command = String(rawCmd2[0] ?? "");
+      args = [...rawCmd2.slice(1).map(String), ...(server.args ?? [])];
+    } else {
+      command = String(rawCmd2);
+      args = server.args ?? [];
+    }
     const source: string = server.source_file ?? "";
     const allArgsStr = args.filter((a): a is string => typeof a === "string").join(" ");
 

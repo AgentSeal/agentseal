@@ -48,8 +48,10 @@ export interface BaselineChange {
 // ═══════════════════════════════════════════════════════════════════════
 
 function configFingerprint(server: Record<string, any>): string {
+  const rawCmd = server.command ?? "";
+  const cmdStr = Array.isArray(rawCmd) ? rawCmd.join(" ") : String(rawCmd);
   const parts = [
-    server.command ?? "",
+    cmdStr,
     JSON.stringify([...(server.args ?? [])].map(String).sort()),
     JSON.stringify(Object.keys(server.env ?? {}).map(String).sort()),
     server.url ?? "",
@@ -115,7 +117,8 @@ export class BaselineStore {
   checkServer(server: Record<string, any>): BaselineChange | null {
     const name: string = server.name ?? "unknown";
     const agentType: string = server.agent_type ?? "unknown";
-    const command: string = server.command ?? "";
+    const rawCmd = server.command ?? "";
+    const command: string = Array.isArray(rawCmd) ? rawCmd.join(" ") : String(rawCmd);
     const args = (server.args ?? []).filter((a: any): a is string => typeof a === "string");
     const now = new Date().toISOString();
 
