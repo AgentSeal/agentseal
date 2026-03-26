@@ -39,7 +39,9 @@ agentseal scan --prompt "You are a helpful assistant..." --model ollama/llama3.1
 agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o              # cloud
 ```
 
-<https://github.com/AgentSeal/agentseal/raw/main/assets/guard-demo.mp4>
+<p align="center">
+  <img src="assets/guard-demo.gif" alt="agentseal guard demo" width="700" />
+</p>
 
 ---
 
