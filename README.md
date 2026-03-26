@@ -40,9 +40,7 @@ agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o         
 ```
 
 <p align="center">
-  <picture>
-    <img src="assets/guard-demo.gif" alt="agentseal guard demo" width="700" style="border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 4px 24px rgba(0,0,0,0.4);" />
-  </picture>
+  <img src="assets/guard-full.png" alt="agentseal guard" width="700" />
 </p>
 
 ---
@@ -70,26 +68,9 @@ Scans all AI agent configurations on your machine. No API key, no network calls 
 agentseal guard
 ```
 
-```
-SKILLS
-  sketchy-rules         MALWARE  Credential access
-  Remove this skill immediately and rotate all credentials.
-  4 more safe skills
-
-MCP SERVERS                                       REGISTRY
-  filesystem            DANGER   SSH key access    42 RISKY
-  Restrict filesystem MCP server: remove .ssh from allowed paths.
-
-TOXIC FLOWS
-  Data exfiltration path: filesystem + slack       HIGH
-
-BASELINE CHANGES (since last scan)
-  + new-mcp-server      NEW      Added since last scan
-  ~ filesystem          CHANGED  Args modified
-
-SUMMARY
-  Critical: 1  High: 2  Medium: 0  Low: 1         STATUS: DANGER
-```
+<p align="center">
+  <img src="assets/guard-mcp-tools.png" alt="agentseal guard - MCP servers with per-tool findings" width="700" />
+</p>
 
 Guard runs a six-stage detection pipeline on every file it finds:
 
