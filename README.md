@@ -1,10 +1,10 @@
 <p align="center">
   <a href="https://agentseal.org">
-    <img src="https://agentseal.org/icon-512.png" height="80" alt="AgentSeal" />
+    <img src="assets/logo-white.png" height="96" alt="AgentSeal" />
   </a>
 </p>
 
-<h3 align="center">225+ security tests across 28 AI agents — MCP poisoning, skill file malware, toxic data flows</h3>
+<h3 align="center">Security toolkit for AI agents. Red-team prompts, detect MCP poisoning,<br>scan skill files, trace toxic data flows. 225+ tests across 28 agents.</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/agentseal/"><img src="https://img.shields.io/pypi/v/agentseal?color=blue" alt="PyPI" /></a>
@@ -40,7 +40,9 @@ agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o         
 ```
 
 <p align="center">
-  <img src="assets/guard-demo.gif" alt="agentseal guard demo" width="700" />
+  <picture>
+    <img src="assets/guard-demo.gif" alt="agentseal guard demo" width="700" style="border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 4px 24px rgba(0,0,0,0.4);" />
+  </picture>
 </p>
 
 ---
@@ -338,6 +340,23 @@ The npm package provides the same CLI commands (`agentseal guard`, `scan`, `scan
 - **Multimodal attack probes** (+13) — image prompt injection, audio jailbreaks, steganography
 - **Behavioral genome mapping** — profile how an agent responds across attack dimensions
 - **PDF reports and dashboard** — exportable reports for compliance and stakeholder review
+
+---
+
+## Why AgentSeal?
+
+| Capability | AgentSeal | Snyk Evo | Invariant Labs | Pillar | Lakera | Mindgard |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Fully open-source scanner | Yes | No | No | No | No | No |
+| Local machine guard (skills + MCP) | Yes | No | No | No | No | No |
+| Prompt red-teaming (225+ probes) | Yes | Limited | No | Yes | Yes | Yes |
+| MCP tool poisoning detection | Yes | No | Partial | No | No | No |
+| Toxic data flow analysis | Yes | No | Yes | No | No | No |
+| Real-time file monitoring | Yes | No | No | No | No | No |
+| Public MCP registry (6,600+) | Yes | No | No | No | No | No |
+| Agents supported | 28 | N/A | 2 | N/A | N/A | N/A |
+| Local LLM support (Ollama) | Yes | No | No | No | No | No |
+| No API key required (guard) | Yes | No | No | No | No | No |
 
 ---
 
