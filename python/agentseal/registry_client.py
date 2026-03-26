@@ -109,3 +109,4 @@ def enrich_mcp_results(
                 r.registry_score = data.get("trust_score")
                 r.registry_level = data.get("trust_level")
                 r.registry_findings_count = data.get("findings_count")
+                r.registry_tools = data.get("tools", [])

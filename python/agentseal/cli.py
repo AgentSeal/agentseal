@@ -1474,6 +1474,20 @@ def _run_guard(args):
                 else:
                     print(f"  {branch} {G}{mr.name}{RST} {G}clean{RST}{reg_info}")
 
+                # Show registry tools (max 5, then "... and N more")
+                if mr.registry_tools:
+                    max_show = 5
+                    shown = mr.registry_tools[:max_show]
+                    for ti, tool_name in enumerate(shown):
+                        is_last_tool = (ti == len(shown) - 1) and len(mr.registry_tools) <= max_show and not mr.findings
+                        t_branch = T_END if is_last_tool else T_TEE
+                        print(f"  {cont}{t_branch} {D}tool      {tool_name}{RST}")
+                    if len(mr.registry_tools) > max_show:
+                        extra = len(mr.registry_tools) - max_show
+                        is_last_extra = not mr.findings
+                        e_branch = T_END if is_last_extra else T_TEE
+                        print(f"  {cont}{e_branch} {D}... and {extra} more{RST}")
+
                 for j, finding in enumerate(mr.findings):
                     is_last_f = (j == len(mr.findings) - 1)
                     f_branch = T_END if is_last_f else T_TEE
@@ -1737,15 +1751,38 @@ def _run_scan_mcp(args):
         sys.exit(exit_code)
         return
 
-    # ── Terminal output ────────────────────────────────────────────
+    # ── Terminal output (tree style) ─────────────────────────────
     print()
-    print(f"  {B}RESULTS{RST}")
 
-    for score in report.trust_scores:
-        # Find matching runtime result
+    def _sev_color_mcp(severity):
+        return {"critical": R, "high": Y, "medium": C, "low": D}.get(severity, D)
+
+    def _sev_tag_mcp(code, severity):
+        c = _sev_color_mcp(severity)
+        return f"{c}[{code} {severity}]{RST}"
+
+    # Tree characters
+    T_MID  = f"{D}\u2502{RST}"   # │
+    T_TEE  = f"{D}\u251c\u2500\u2500{RST}"  # ├──
+    T_END  = f"{D}\u2514\u2500\u2500{RST}"  # └──
+    T_DOT  = "\u25cf"  # ●
+
+    # ── Servers ──
+    all_scores = list(report.trust_scores)
+    conn_errors = list(report.connection_errors)
+
+    print(f"  {T_DOT} {B}Scanned {report.servers_scanned} MCP server(s){RST}")
+    print()
+
+    for idx, score in enumerate(all_scores):
         rr = next((r for r in report.runtime_results if r.server_name == score.server_name), None)
         tools_found = rr.tools_found if rr else 0
         findings_count = len(rr.findings) if rr else 0
+        has_more_after = (idx < len(all_scores) - 1) or conn_errors
+        is_last = not has_more_after
+
+        branch = T_END if is_last else T_TEE
+        cont = "    " if is_last else f"  {T_MID} "
 
         # Score color
         if score.score >= 80:
@@ -1755,73 +1792,99 @@ def _run_scan_mcp(args):
         else:
             sc = R
 
-        # Status icon
+        # Server header: name (N tools)    score/100 LEVEL  or  OK
         if findings_count == 0:
-            icon = f"{G}✓{RST}"
+            score_tag = f"{G}OK{RST}"
         else:
-            icon = f"{R}✗{RST}"
+            score_tag = f"{sc}{score.score}/100 {score.level.upper()}{RST}"
 
-        print(f"  {icon} {score.server_name:<25s} {D}{tools_found} tools{RST}   Score: {sc}{score.score}/100  {score.level.upper()}{RST}")
+        print(f"  {branch} {B}{score.server_name}{RST} {D}({tools_found} tools){RST}    {score_tag}")
 
-        # Show findings in verbose mode or for critical/high
-        if rr:
-            for finding in rr.findings:
-                if verbose or finding.severity in ("critical", "high"):
-                    sev_color = R if finding.severity == "critical" else Y
-                    print(f"    {sev_color}{finding.code} {finding.severity.upper():<9s}{RST} {finding.title}")
+        # Show tool names from findings (unique tools that had findings)
+        if rr and rr.findings:
+            tool_names = []
+            for f in rr.findings:
+                if f.tool_name and f.tool_name not in tool_names:
+                    tool_names.append(f.tool_name)
+            for ti, tn in enumerate(tool_names):
+                is_last_tool = (ti == len(tool_names) - 1) and not rr.findings
+                t_branch = T_END if is_last_tool else T_TEE
+                print(f"  {cont}{t_branch} {D}tool{RST}      {tn}")
+
+            # Show findings
+            visible_findings = [
+                f for f in rr.findings
+                if verbose or f.severity in ("critical", "high")
+            ]
+            for fi, finding in enumerate(visible_findings):
+                is_last_f = (fi == len(visible_findings) - 1)
+                tag = _sev_tag_mcp(finding.code, finding.severity)
+                print(f"  {cont}{T_DOT} {tag}: {finding.title}")
+                print(f"  {cont}  {C}fix: {finding.remediation}{RST}")
 
     # Connection errors
-    for err in report.connection_errors:
-        print(f"  {D}⊘{RST} {err.get('server_name', '?'):<25s} {R}{err.get('error_type', 'error').upper()}{RST} {D}{err.get('detail', '')}{RST}")
+    for ei, err in enumerate(conn_errors):
+        is_last_err = (ei == len(conn_errors) - 1)
+        branch = T_END if is_last_err else T_TEE
+        server_name = err.get('server_name', '?')
+        error_type = err.get('error_type', 'error').upper()
+        detail = err.get('detail', '')
+        print(f"  {branch} {D}{server_name}{RST} {R}({error_type}){RST} {D}{detail}{RST}")
 
-    # Toxic flows
+    print()
+
+    # ── Toxic Flows ──
     if report.toxic_flows:
+        n_flows = len(report.toxic_flows)
+        print(f"  {T_DOT} {R}{B}{n_flows} toxic flow(s) detected{RST}")
         print()
-        print(f"  {B}TOXIC FLOWS (runtime){RST}")
-        for flow in report.toxic_flows:
+        for i, flow in enumerate(report.toxic_flows):
+            is_last = (i == len(report.toxic_flows) - 1)
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
             level_color = R if flow.risk_level == "high" else Y
-            print(f"  {level_color}[{flow.risk_level.upper()}]{RST} {flow.title}")
+            print(f"  {branch} {level_color}{flow.risk_level.upper()}{RST}: {flow.title}")
             if flow.tools_involved:
-                print(f"       {D}Tools: {', '.join(flow.tools_involved)}{RST}")
-            print(f"       {C}-> {flow.remediation}{RST}")
-
-    # Baseline changes (rug pulls)
-    if report.baseline_changes:
+                print(f"  {cont}{D}tools: {', '.join(flow.tools_involved)}{RST}")
+            print(f"  {cont}{C}fix: {flow.remediation}{RST}")
         print()
-        print(f"  {B}RUG PULL DETECTION{RST}")
-        for change in report.baseline_changes:
-            if change.change_type == "tools_changed":
-                print(f"  {R}[!!]{RST} {change.server_name}: {change.detail}")
-            elif change.change_type == "tools_added":
-                print(f"  {Y}[!!]{RST} {change.server_name}: {change.detail}")
-            else:
-                print(f"  {D}[--]{RST} {change.server_name}: {change.detail}")
 
-    # Summary
-    print()
-    print(f"  {'─' * 52}")
-    print(f"  Servers: {report.servers_connected} connected, {report.servers_failed} failed")
-    print(f"  Tools:   {report.total_tools} analyzed")
-
-    if report.total_findings > 0:
-        parts = []
-        if report.total_critical > 0:
-            parts.append(f"{R}{report.total_critical} critical{RST}")
-        if report.total_high > 0:
-            parts.append(f"{Y}{report.total_high} high{RST}")
-        if report.total_medium > 0:
-            parts.append(f"{D}{report.total_medium} medium{RST}")
-        print(f"  Findings: {', '.join(parts)}")
-    else:
-        print(f"  {G}No security findings detected.{RST}")
-
+    # ── Baseline Changes (Rug Pulls) ──
     if report.baseline_changes:
-        print(f"  {R}Rug pulls: {len(report.baseline_changes)} detected{RST}")
-    if report.toxic_flows:
-        print(f"  Toxic flows: {len(report.toxic_flows)}")
+        n_bl = len(report.baseline_changes)
+        print(f"  {T_DOT} {R}{B}{n_bl} baseline change(s) (rug pull detection){RST}")
+        print()
+        for i, change in enumerate(report.baseline_changes):
+            is_last = (i == len(report.baseline_changes) - 1)
+            branch = T_END if is_last else T_TEE
+            if change.change_type in ("tools_changed", "tools_added"):
+                color = R if change.change_type == "tools_changed" else Y
+            else:
+                color = D
+            print(f"  {branch} {color}{change.server_name}{RST}: {change.detail}")
+        print()
 
-    print()
-    print(f"  {D}Scan completed in {report.duration_seconds:.1f} seconds.{RST}")
+    # ── Summary ──
+    sev_parts = []
+    if report.total_critical > 0:
+        sev_parts.append(f"{R}{report.total_critical} critical{RST}")
+    if report.total_high > 0:
+        sev_parts.append(f"{Y}{report.total_high} high{RST}")
+    if report.total_medium > 0:
+        sev_parts.append(f"{D}{report.total_medium} medium{RST}")
+
+    if sev_parts:
+        print(f"  {T_DOT} {B}Summary:{RST} {', '.join(sev_parts)}")
+    else:
+        print(f"  {T_DOT} {B}Summary:{RST} {G}clean{RST}")
+
+    print(f"    Servers: {report.servers_connected} connected, {report.servers_failed} failed")
+    print(f"    Tools:   {report.total_tools} analyzed")
+    if report.baseline_changes:
+        print(f"    {R}Rug pulls: {len(report.baseline_changes)} detected{RST}")
+    if report.toxic_flows:
+        print(f"    Toxic flows: {len(report.toxic_flows)}")
+    print(f"    {D}Completed in {report.duration_seconds:.1f}s{RST}")
     print()
 
     # Save if requested

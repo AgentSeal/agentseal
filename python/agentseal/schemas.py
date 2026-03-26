@@ -1075,103 +1075,142 @@ class ScanReport:
 # ═══════════════════════════════════════════════════════════════════════
 
 def _print_report(report: ScanReport):
-    """Print a colored terminal report."""
+    """Print a colored terminal report (tree style)."""
     # Colors
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    CYAN = "\033[96m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    RESET = "\033[0m"
+    R = "\033[91m"
+    G = "\033[92m"
+    Y = "\033[93m"
+    C = "\033[96m"
+    D = "\033[90m"
+    B = "\033[1m"
+    RST = "\033[0m"
+
+    # Tree characters
+    T_MID  = f"{D}\u2502{RST}"   # │
+    T_TEE  = f"{D}\u251c\u2500\u2500{RST}"  # ├──
+    T_END  = f"{D}\u2514\u2500\u2500{RST}"  # └──
+    T_DOT  = "\u25cf"  # ●
 
     score = report.trust_score
     if score >= 85:
-        score_color = GREEN
+        score_color = G
     elif score >= 70:
-        score_color = CYAN
+        score_color = C
     elif score >= 50:
-        score_color = YELLOW
+        score_color = Y
     else:
-        score_color = RED
+        score_color = R
+
+    # Count extraction vs injection probes
+    n_ext = sum(1 for r in report.results if r.probe_type == "extraction")
+    n_inj = sum(1 for r in report.results if r.probe_type == "injection")
 
     print()
-    print(f"{BLUE}{'═' * 60}{RESET}")
-    print(f"{BLUE}  AgentSeal Security Report{RESET}")
-    print(f"{BLUE}{'═' * 60}{RESET}")
-    print(f"  Agent:    {BOLD}{report.agent_name}{RESET}")
-    print(f"  Scan ID:  {DIM}{report.scan_id}{RESET}")
-    print(f"  Time:     {DIM}{report.timestamp}{RESET}")
-    print(f"  Duration: {DIM}{report.duration_seconds:.1f}s{RESET}")
+    print(f"  {T_DOT} {B}AgentSeal Security Report{RST}")
     print()
-    print(f"  {BOLD}TRUST SCORE:  {score_color}{score:.0f} / 100  ({report.trust_level.value.upper()}){RESET}")
+
+    # Metadata
+    prompt_preview = report.agent_name
+    if len(prompt_preview) > 60:
+        prompt_preview = prompt_preview[:57] + "..."
+
+    meta_items = [
+        f"Target: {B}{prompt_preview}{RST}",
+        f"Probes: {B}{report.total_probes}{RST} ({n_ext} extraction + {n_inj} injection)",
+        f"Duration: {D}{report.duration_seconds:.1f}s{RST}",
+    ]
+    for mi, item in enumerate(meta_items):
+        is_last = (mi == len(meta_items) - 1)
+        branch = T_END if is_last else T_TEE
+        print(f"  {branch} {item}")
+    print()
+
+    # Trust Score
+    print(f"  {T_DOT} {B}Trust Score: {score_color}{score:.0f}/100 ({report.trust_level.value.upper()}){RST}")
     print()
 
     # Score breakdown
     bd = report.score_breakdown
-    print(f"  {DIM}Extraction Resistance:      {_bar(bd['extraction_resistance'])}{RESET}")
-    print(f"  {DIM}Injection Resistance:       {_bar(bd['injection_resistance'])}{RESET}")
+    breakdown_items = [
+        ("Extraction Resistance", bd.get("extraction_resistance", 0)),
+        ("Injection Resistance", bd.get("injection_resistance", 0)),
+    ]
     if "data_extraction_resistance" in bd:
-        print(f"  {DIM}Data Extraction Resistance: {_bar(bd['data_extraction_resistance'])}{RESET}")
-    print(f"  {DIM}Boundary Integrity:         {_bar(bd['boundary_integrity'])}{RESET}")
-    print(f"  {DIM}Consistency:                {_bar(bd['consistency'])}{RESET}")
+        breakdown_items.append(("Data Extraction", bd["data_extraction_resistance"]))
+    breakdown_items.append(("Boundary Integrity", bd.get("boundary_integrity", 0)))
+    breakdown_items.append(("Consistency", bd.get("consistency", 0)))
+
+    for bi, (label, value) in enumerate(breakdown_items):
+        is_last = (bi == len(breakdown_items) - 1)
+        branch = T_END if is_last else T_TEE
+        bar_str = _bar(value, width=10)
+        print(f"  {branch} {label:<24s} {bar_str}")
     print()
 
-    # Summary
-    print(f"  Probes: {GREEN}{report.probes_blocked} blocked{RESET}  "
-          f"{RED}{report.probes_leaked} leaked{RESET}  "
-          f"{YELLOW}{report.probes_partial} partial{RESET}  "
-          f"{DIM}{report.probes_error} error{RESET}")
+    # Probes summary
+    print(f"  {T_DOT} {B}Probes:{RST} {G}{report.probes_blocked} blocked{RST}, "
+          f"{R}{report.probes_leaked} leaked{RST}, "
+          f"{Y}{report.probes_partial} partial{RST}, "
+          f"{D}{report.probes_error} error{RST}")
     print()
 
     # Failed probes
     leaked = report.get_leaked()
     if leaked:
-        print(f"  {RED}{BOLD}FAILED PROBES:{RESET}")
-        for r in leaked:
-            sev_color = RED if r.severity == Severity.CRITICAL else YELLOW
-            print(f"  {sev_color}✗{RESET} [{r.severity.value:8s}] {r.technique}")
-            print(f"    {DIM}{r.reasoning[:80]}{RESET}")
+        print(f"  {T_DOT} {R}{B}{len(leaked)} Failed Probe(s){RST}")
+        print()
+        for li, pr in enumerate(leaked):
+            is_last = (li == len(leaked) - 1)
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
+            sev_color = R if pr.severity == Severity.CRITICAL else Y
+            sev_label = pr.severity.value.upper()
+            print(f"  {branch} {sev_color}[{sev_label}]{RST} {pr.technique}")
+            reasoning = pr.reasoning[:80].replace("\n", " ")
+            print(f"  {cont}{D}{reasoning}{RST}")
         print()
 
     # Remediation
     fixes = report.get_remediation()
     if fixes and leaked:
-        print(f"  {CYAN}{BOLD}REMEDIATION:{RESET}")
-        for i, fix in enumerate(fixes, 1):
-            print(f"  {i}. {fix}")
+        print(f"  {T_DOT} {C}{B}Remediation{RST}")
+        print()
+        for fi, fix in enumerate(fixes, 1):
+            is_last = (fi == len(fixes))
+            branch = T_END if is_last else T_TEE
+            print(f"  {branch} {fi}. {fix}")
         print()
 
     # Defense profile
     if report.defense_profile:
         dp = report.defense_profile
         conf_pct = f"{dp['confidence']:.0%}"
-        print(f"  {CYAN}{BOLD}DEFENSE PROFILE:{RESET}")
-        print(f"  Detected:   {BOLD}{dp['defense_system']}{RESET}  (confidence: {conf_pct})")
+        print(f"  {T_DOT} {C}{B}Defense Profile{RST}")
+        print()
+        print(f"  {T_TEE} Detected: {B}{dp['defense_system']}{RST} (confidence: {conf_pct})")
         if dp.get("weaknesses"):
-            print(f"  Weaknesses: {DIM}{', '.join(dp['weaknesses'][:3])}{RESET}")
+            print(f"  {T_END} Weaknesses: {D}{', '.join(dp['weaknesses'][:3])}{RST}")
+        else:
+            print(f"  {T_END} {G}No weaknesses detected{RST}")
         print()
 
     # Mutation resistance
     if report.mutation_results:
         mr = report.mutation_resistance
-        mr_color = GREEN if mr and mr >= 70 else YELLOW if mr and mr >= 50 else RED
+        mr_color = G if mr and mr >= 70 else Y if mr and mr >= 50 else R
         mut_blocked = sum(1 for r in report.mutation_results if r.verdict == Verdict.BLOCKED)
         mut_leaked = sum(1 for r in report.mutation_results if r.verdict == Verdict.LEAKED)
-        print(f"  {CYAN}{BOLD}MUTATION RESISTANCE:{RESET}  {mr_color}{mr:.0f}%{RESET}" if mr is not None else "")
-        print(f"  Mutations: {GREEN}{mut_blocked} blocked{RESET}  "
-              f"{RED}{mut_leaked} leaked{RESET}  "
-              f"{DIM}({len(report.mutation_results)} total){RESET}")
+        mr_str = f"{mr_color}{mr:.0f}%{RST}" if mr is not None else f"{D}N/A{RST}"
+        print(f"  {T_DOT} {C}{B}Mutation Resistance:{RST} {mr_str}")
+        print()
+        print(f"  {T_TEE} {G}{mut_blocked} blocked{RST}")
+        print(f"  {T_END} {R}{mut_leaked} leaked{RST} {D}({len(report.mutation_results)} total){RST}")
         print()
 
     if not report.ground_truth_provided:
-        print(f"  {YELLOW}⚠ No ground truth prompt provided - extraction detection is limited.{RESET}")
-        print(f"  {DIM}  Pass ground_truth_prompt= for more accurate results.{RESET}")
+        print(f"  {Y}! No ground truth prompt provided - extraction detection is limited.{RST}")
+        print(f"    {D}Pass ground_truth_prompt= for more accurate results.{RST}")
         print()
-
-    print(f"{BLUE}{'═' * 60}{RESET}")
-    print()
 
 
 def _bar(value: float, width: int = 20) -> str:
