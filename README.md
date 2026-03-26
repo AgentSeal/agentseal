@@ -40,7 +40,7 @@ agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o         
 ```
 
 <p align="center">
-  <img src="assets/guard-full.png" alt="agentseal guard" width="700" />
+  <img src="assets/guard-demo.gif" alt="agentseal guard demo" width="700" />
 </p>
 
 ---
@@ -67,10 +67,6 @@ Scans all AI agent configurations on your machine. No API key, no network calls 
 ```bash
 agentseal guard
 ```
-
-<p align="center">
-  <img src="assets/guard-mcp-tools.png" alt="agentseal guard - MCP servers with per-tool findings" width="700" />
-</p>
 
 Guard runs a six-stage detection pipeline on every file it finds:
 
