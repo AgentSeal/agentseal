@@ -27,7 +27,7 @@
 
 ```bash
 pip install agentseal    # or: npm install agentseal
-agentseal guard          # scan your machine — no API key needed
+agentseal guard          # scan your machine - no API key needed
 ```
 
 That's it. AgentSeal finds dangerous skill files, poisoned MCP server configs, and data exfiltration paths across every AI agent on your machine.
@@ -62,7 +62,7 @@ agentseal scan --prompt "You are a helpful assistant..." --model gpt-4o         
 
 ## Guard
 
-Scans all AI agent configurations on your machine. No API key, no network calls — everything runs locally.
+Scans all AI agent configurations on your machine. No API key, no network calls - everything runs locally.
 
 **Supported agents:** Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, Codex CLI, Cline, Roo Code, Kilo Code, Copilot CLI, Aider, Continue, Zed, Amp, Amazon Q, Junie, Goose, Kiro, OpenCode, OpenClaw, Crush, Qwen Code, Grok CLI, Visual Studio, Kimi CLI, Trae, MaxClaw.
 
@@ -93,12 +93,12 @@ SUMMARY
 
 Guard runs a six-stage detection pipeline on every file it finds:
 
-1. **Pattern signatures** — known malicious patterns (credential access, exfiltration URLs, shell commands)
-2. **Deobfuscation** — decodes Unicode tags, Base64, BiDi overrides, zero-width characters, TR39 confusables
-3. **Semantic analysis** — embedding similarity (MiniLM-L6-v2) catches rephrased attacks that bypass patterns
-4. **Baseline tracking** — SHA-256 hashes detect config changes since your last scan (rug-pull detection)
-5. **Registry enrichment** — live trust scores from the [MCP Security Registry](https://agentseal.org/mcp) (6,600+ servers)
-6. **Custom rules** — YAML rules to enforce org-specific policies
+1. **Pattern signatures** - known malicious patterns (credential access, exfiltration URLs, shell commands)
+2. **Deobfuscation** - decodes Unicode tags, Base64, BiDi overrides, zero-width characters, TR39 confusables
+3. **Semantic analysis** - embedding similarity (MiniLM-L6-v2) catches rephrased attacks that bypass patterns
+4. **Baseline tracking** - SHA-256 hashes detect config changes since your last scan (rug-pull detection)
+5. **Registry enrichment** - live trust scores from the [MCP Security Registry](https://agentseal.org/mcp) (6,600+ servers)
+6. **Custom rules** - YAML rules to enforce org-specific policies
 
 ```bash
 agentseal guard init             # generate .agentseal.yaml project policy
@@ -114,7 +114,7 @@ agentseal guard test             # validate your custom rules
 
 Tests a system prompt against [225 adversarial attack probes](PROBES.md): 82 extraction techniques, 143 injection techniques, and 8 adaptive mutation transforms. Returns a deterministic trust score.
 
-**How detection works:** Injection probes embed a unique canary string (e.g. `SEAL_A1B2C3D4_CONFIRMED`). If the canary appears in the response, the probe leaked. Extraction probes use n-gram matching against the ground truth prompt. No LLM judge — same input, same result, every time.
+**How detection works:** Injection probes embed a unique canary string (e.g. `SEAL_A1B2C3D4_CONFIRMED`). If the canary appears in the response, the probe leaked. Extraction probes use n-gram matching against the ground truth prompt. No LLM judge - same input, same result, every time.
 
 **Trust score** (0–100):
 
@@ -165,7 +165,7 @@ agentseal scan-mcp --server npx @modelcontextprotocol/server-filesystem /tmp
 agentseal scan-mcp --sse http://localhost:3001/sse
 ```
 
-Catches tool description poisoning — hidden instructions embedded in tool descriptions that make the agent exfiltrate data, execute commands, or override user intent.
+Catches tool description poisoning - hidden instructions embedded in tool descriptions that make the agent exfiltrate data, execute commands, or override user intent.
 
 ---
 
@@ -273,7 +273,7 @@ validator = AgentValidator.from_anthropic(
 # HTTP endpoint
 validator = AgentValidator.from_endpoint(url="http://localhost:8080/chat")
 
-# Custom function — bring your own agent
+# Custom function - bring your own agent
 validator = AgentValidator(agent_fn=my_agent, ground_truth_prompt="...")
 ```
 
@@ -327,7 +327,7 @@ The npm package provides the same CLI commands (`agentseal guard`, `scan`, `scan
 
 - **Python** 3.10+ or **Node.js** 18+
 - `guard`, `shield`, `scan-mcp` work offline with no API key
-- `scan` requires an LLM — use [Ollama](https://ollama.com) for free local inference, or provide a cloud API key
+- `scan` requires an LLM - use [Ollama](https://ollama.com) for free local inference, or provide a cloud API key
 
 ---
 
@@ -335,28 +335,30 @@ The npm package provides the same CLI commands (`agentseal guard`, `scan`, `scan
 
 [AgentSeal Pro](https://agentseal.org) is for security teams running continuous assessments. It extends the open-source scanner with:
 
-- **MCP tool poisoning probes** (+45) — rug-pull, shadowing, cross-tool injection
-- **RAG poisoning probes** (+28) — document injection, retrieval manipulation
-- **Multimodal attack probes** (+13) — image prompt injection, audio jailbreaks, steganography
-- **Behavioral genome mapping** — profile how an agent responds across attack dimensions
-- **PDF reports and dashboard** — exportable reports for compliance and stakeholder review
+- **MCP tool poisoning probes** (+45) - rug-pull, shadowing, cross-tool injection
+- **RAG poisoning probes** (+28) - document injection, retrieval manipulation
+- **Multimodal attack probes** (+13) - image prompt injection, audio jailbreaks, steganography
+- **Behavioral genome mapping** - profile how an agent responds across attack dimensions
+- **PDF reports and dashboard** - exportable reports for compliance and stakeholder review
 
 ---
 
 ## Why AgentSeal?
 
-| Capability | AgentSeal | Snyk Evo | Invariant Labs | Pillar | Lakera | Mindgard |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Fully open-source scanner | Yes | No | No | No | No | No |
-| Local machine guard (skills + MCP) | Yes | No | No | No | No | No |
-| Prompt red-teaming (225+ probes) | Yes | Limited | No | Yes | Yes | Yes |
-| MCP tool poisoning detection | Yes | No | Partial | No | No | No |
-| Toxic data flow analysis | Yes | No | Yes | No | No | No |
-| Real-time file monitoring | Yes | No | No | No | No | No |
-| Public MCP registry (6,600+) | Yes | No | No | No | No | No |
-| Agents supported | 28 | N/A | 2 | N/A | N/A | N/A |
-| Local LLM support (Ollama) | Yes | No | No | No | No | No |
-| No API key required (guard) | Yes | No | No | No | No | No |
+| Capability | AgentSeal | Snyk (agent-scan) | Pillar | Lakera | Mindgard |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Open-source scanner | Yes | Partial\* | No | No | No |
+| Local machine guard (skills + MCP) | Yes | Yes | Partial | No | No |
+| Prompt red-teaming | 225+ probes | 20 attack goals | Yes | Yes | Yes |
+| MCP tool poisoning detection | Yes | Yes | Partial | Partial | No |
+| Toxic data flow analysis | Yes | Yes | Partial | No | No |
+| Real-time file monitoring | Yes | No | No | No | No |
+| Public MCP server registry | 6,600+ | No | No | No | No |
+| Agents supported | 28 | 10+ | 2+ | N/A | N/A |
+| Local LLM support (Ollama) | Yes | No | No | No | No |
+| No API key required (guard) | Yes | No | No | No | No |
+
+\*Snyk agent-scan CLI is Apache-2.0. The Evo platform, Agent Guard, and red-teaming are proprietary SaaS.
 
 ---
 
@@ -365,7 +367,7 @@ The npm package provides the same CLI commands (`agentseal guard`, `scan`, `scan
 Found a detection gap, a false positive, or want to add a new probe? See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and the PR process.
 
 - **Report issues**: [github.com/AgentSeal/agentseal/issues](https://github.com/AgentSeal/agentseal/issues)
-- **Probe catalog**: [PROBES.md](PROBES.md) — full list of all 225 attack probes with techniques and severity
+- **Probe catalog**: [PROBES.md](PROBES.md) - full list of all 225 attack probes with techniques and severity
 
 ## License
 
