@@ -1327,298 +1327,297 @@ def _run_guard(args):
         sys.exit(_exit_code())
         return
 
-    # ── Terminal output (kubectl/docker style) ─────────────────────
+    # ── Terminal output (tree style) ────────────────────────────────
     import re as _re
     print()
 
-    # -- ANSI-aware padding --
     _ANSI_RE = _re.compile(r'\033\[[0-9;]*m')
 
     def _vlen(s):
-        """Visible length of string (excludes ANSI codes)."""
         return len(_ANSI_RE.sub('', s))
 
-    def _col(s, w):
-        """Pad string to width w, accounting for ANSI escape codes."""
-        return s + ' ' * max(0, w - _vlen(s))
+    def _sev_color(severity):
+        return {"critical": R, "high": Y, "medium": C, "low": D}.get(severity, D)
 
-    def _verdict(verdict, label=None):
-        if verdict == GuardVerdict.DANGER:
-            return f"{R}{label or 'DANGER'}{RST}"
-        if verdict == GuardVerdict.WARNING:
-            return f"{Y}{label or 'WARNING'}{RST}"
-        if verdict == GuardVerdict.ERROR:
-            return f"{D}ERROR{RST}"
-        return f"{G}{label or 'OK'}{RST}"
+    def _sev_tag(code, severity):
+        c = _sev_color(severity)
+        return f"{c}[{code} {severity}]{RST}"
 
-    def _sev(severity):
-        sev_colors = {"critical": R, "high": Y, "medium": C, "low": D}
-        return f"{sev_colors.get(severity, D)}{severity}{RST}"
-
-    def _path(p, maxlen=40):
+    def _path_short(p, maxlen=50):
         if not p or len(p) <= maxlen:
-            return p or "-"
+            return p or ""
         parts = p.split("/")
         if len(parts) > 3:
             return "~/" + "/".join(parts[-2:])
         return "..." + p[-(maxlen - 3):]
 
-    W = 62  # total table width
-    SEP = f"  {D}{'-' * W}{RST}"
-    W1 = 20  # name
-    W2 = 12  # verdict/status
-    W3 = 10  # severity/mcp count
+    # Tree characters
+    T_MID  = f"{D}\u2502{RST}"   # │
+    T_TEE  = f"{D}\u251c\u2500\u2500{RST}"  # ├──
+    T_END  = f"{D}\u2514\u2500\u2500{RST}"  # └──
+    T_DOT  = "\u25cf"  # ●
 
     # ── Agents ──
     installed = [a for a in report.agents_found if a.status != "not_installed"]
     agents_to_show = report.agents_found if verbose else installed
     if agents_to_show:
-        n_found = len(installed)
-        print(SEP)
-        print(f"  {B}AGENTS{RST}{' ' * (W - 6 - len(str(n_found)) - 6)}{D}{n_found} found{RST}")
-        print(SEP)
-        print(f"  {D}{_col('NAME', W1)}  {_col('STATUS', W2)}  {_col('MCP', 5)}  CONFIG{RST}")
-        for agent in agents_to_show:
-            name = agent.name[:W1]
+        print(f"  {T_DOT} {B}Found {len(installed)} agents{RST}")
+        print()
+        for i, agent in enumerate(agents_to_show):
+            is_last = (i == len(agents_to_show) - 1)
+            branch = T_END if is_last else T_TEE
             if agent.status == "found":
-                status = _verdict(GuardVerdict.SAFE, "ok")
-                mcp = str(agent.mcp_servers) if agent.mcp_servers > 0 else "-"
-                config = f"{D}{_path(agent.config_path)}{RST}"
+                mcp_info = f" ({agent.mcp_servers} MCP)" if agent.mcp_servers > 0 else ""
+                config = _path_short(agent.config_path)
+                print(f"  {branch} {G}{agent.name}{RST}{mcp_info}")
+                cont = "    " if is_last else f"  {T_MID} "
+                print(f"  {cont} {D}{config}{RST}")
             elif agent.status == "installed_no_config":
-                status = f"{D}installed{RST}"
-                mcp = "-"
-                config = f"{D}-{RST}"
+                print(f"  {branch} {D}{agent.name}{RST} {D}(installed, no config){RST}")
             elif agent.status == "error":
-                status = f"{Y}error{RST}"
-                mcp = "-"
-                config = f"{D}-{RST}"
+                print(f"  {branch} {Y}{agent.name}{RST} {D}(error){RST}")
             else:
-                status = f"{D}not found{RST}"
-                mcp = "-"
-                config = f"{D}-{RST}"
-            print(f"  {_col(name, W1)}  {_col(status, W2)}  {_col(mcp, 5)}  {config}")
+                print(f"  {branch} {D}{agent.name} (not found){RST}")
         print()
 
     # ── Skills ──
     if report.skill_results:
         n_skills = len(report.skill_results)
-        print(SEP)
-        print(f"  {B}SKILLS{RST}{' ' * (W - 6 - len(str(n_skills)) - 8)}{D}{n_skills} scanned{RST}")
-        print(SEP)
-        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('SEVERITY', W3)}  FINDING{RST}")
-        safe_count = 0
-        for sr in report.skill_results:
-            name = sr.name[:W1]
+        safe_count = sum(1 for sr in report.skill_results if sr.verdict == GuardVerdict.SAFE)
+        threat_skills = [sr for sr in report.skill_results if sr.verdict != GuardVerdict.SAFE]
+        print(f"  {T_DOT} {B}Scanned {n_skills} skill(s){RST}")
+        print()
+        items = threat_skills if not verbose else report.skill_results
+        for i, sr in enumerate(items):
+            has_safe_footer = (not verbose and safe_count > 0)
+            is_last = (i == len(items) - 1) and not has_safe_footer
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
+
             if sr.verdict in (GuardVerdict.DANGER, GuardVerdict.WARNING):
-                top = sr.top_finding
-                is_danger = sr.verdict == GuardVerdict.DANGER
-                desc = top.title if top else ("Malicious" if is_danger else "Suspicious")
-                source = _finding_source(top) if top else ""
-                sev_str = _sev(top.severity) if top else _sev("critical" if is_danger else "medium")
-                v_str = _verdict(sr.verdict)
-                print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {_col(sev_str, W3)}  {desc}")
-                if source:
-                    print(f"  {'':<{W1}}  {D}via: {source}{RST}")
-                if top and top.evidence and (is_danger or verbose):
-                    ev = top.evidence[:80].replace("\n", " ")
-                    print(f"  {'':<{W1}}  {D}evidence: \"{ev}\"{RST}")
-                if top:
-                    print(f"  {'':<{W1}}  {C}fix: {top.remediation}{RST}")
+                # Severity summary
+                sev_counts = {}
+                for f in sr.findings:
+                    sev_counts[f.severity] = sev_counts.get(f.severity, 0) + 1
+                sev_parts = ", ".join(f"{n} {s}" for s, n in sorted(sev_counts.items(), key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x[0], 9)))
+                sev_info = f" ({sev_parts})" if sev_parts else ""
+                name_color = R if sr.verdict == GuardVerdict.DANGER else Y
+                print(f"  {branch} {name_color}{sr.name}{RST}{sev_info}")
+                for j, finding in enumerate(sr.findings):
+                    is_last_f = (j == len(sr.findings) - 1)
+                    f_branch = T_END if is_last_f else T_TEE
+                    tag = _sev_tag(finding.code, finding.severity)
+                    print(f"  {cont}{f_branch} {tag}: {finding.title}")
+                    f_cont = "    " if is_last_f else f"  {T_MID} "
+                    if finding.evidence and (sr.verdict == GuardVerdict.DANGER or verbose):
+                        ev = finding.evidence[:80].replace("\n", " ")
+                        print(f"  {cont}{f_cont}{D}evidence: \"{ev}\"{RST}")
+                    print(f"  {cont}{f_cont}{C}fix: {finding.remediation}{RST}")
             elif sr.verdict == GuardVerdict.ERROR:
                 top = sr.top_finding
                 desc = top.description if top else "Could not read"
-                print(f"  {_col(name, W1)}  {_col(_verdict(sr.verdict), W2)}  {_col('-', W3)}  {D}{desc}{RST}")
+                print(f"  {branch} {D}{sr.name} - {desc}{RST}")
             else:
-                if verbose:
-                    print(f"  {_col(name, W1)}  {_col(_verdict(sr.verdict, 'OK'), W2)}  {_col('-', W3)}  {G}clean{RST}")
-                else:
-                    safe_count += 1
+                print(f"  {branch} {G}{sr.name}{RST} {G}clean{RST}")
 
         if safe_count > 0 and not verbose:
-            print(f"  {G}+ {safe_count} clean{RST}")
+            print(f"  {T_END} {G}{safe_count} clean skill(s){RST}")
         print()
 
     # ── MCP Servers ──
     if report.mcp_results:
         n_mcp = len(report.mcp_results)
-        print(SEP)
-        print(f"  {B}MCP SERVERS{RST}{' ' * (W - 11 - len(str(n_mcp)) - 8)}{D}{n_mcp} scanned{RST}")
-        print(SEP)
-        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('REGISTRY', 14)}  FINDING{RST}")
+        # Group by source_file
+        by_source: dict[str, list] = {}
         for mr in report.mcp_results:
-            name = mr.name[:W1]
+            src = mr.source_file or "unknown"
+            by_source.setdefault(src, []).append(mr)
 
-            # Registry trust score display
-            if mr.registry_score is not None:
-                rs = mr.registry_score
-                rl = mr.registry_level or "?"
-                if rl in ("EXCELLENT", "HIGH"):
-                    reg_str = f"{G}{int(rs)} {rl}{RST}"
-                elif rl == "MEDIUM":
-                    reg_str = f"{Y}{int(rs)} {rl}{RST}"
-                else:
-                    reg_str = f"{R}{int(rs)} {rl}{RST}"
-            else:
-                reg_str = f"{D}\u2014{RST}"
-
-            if mr.verdict in (GuardVerdict.DANGER, GuardVerdict.WARNING):
-                top = mr.top_finding
-                desc = top.title if top else "Issue"
-                print(f"  {_col(name, W1)}  {_col(_verdict(mr.verdict), W2)}  {_col(reg_str, 14)}  {desc}")
-                if top:
-                    print(f"  {'':<{W1}}  {' ' * 14}  {C}fix: {top.remediation}{RST}")
-            else:
-                v_str = _verdict(mr.verdict, "OK")
-                print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {_col(reg_str, 14)}  {G}clean{RST}")
+        print(f"  {T_DOT} {B}Scanned {n_mcp} MCP server(s){RST}")
         print()
+
+        source_keys = list(by_source.keys())
+        for si, source in enumerate(source_keys):
+            servers = by_source[source]
+            is_last_source = (si == len(source_keys) - 1)
+            source_short = _path_short(source)
+            print(f"  {T_DOT} {D}Scanning {source_short}{RST} - {B}{len(servers)} server(s){RST}")
+            print()
+            for i, mr in enumerate(servers):
+                is_last = (i == len(servers) - 1)
+                branch = T_END if is_last else T_TEE
+                cont = "    " if is_last else f"  {T_MID} "
+
+                # Severity summary for this server
+                sev_counts = {}
+                for f in mr.findings:
+                    sev_counts[f.severity] = sev_counts.get(f.severity, 0) + 1
+                sev_parts = ", ".join(f"{n} {s}" for s, n in sorted(sev_counts.items(), key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x[0], 9)))
+                sev_info = f" ({sev_parts})" if sev_parts else ""
+
+                # Registry info
+                reg_info = ""
+                if mr.registry_score is not None:
+                    rs = int(mr.registry_score)
+                    rl = mr.registry_level or "?"
+                    if rl in ("EXCELLENT", "HIGH"):
+                        reg_info = f" {D}registry:{RST} {G}{rs} {rl}{RST}"
+                    elif rl == "MEDIUM":
+                        reg_info = f" {D}registry:{RST} {Y}{rs} {rl}{RST}"
+                    else:
+                        reg_info = f" {D}registry:{RST} {R}{rs} {rl}{RST}"
+
+                if mr.verdict == GuardVerdict.DANGER:
+                    print(f"  {branch} {R}{mr.name}{RST}{sev_info}{reg_info}")
+                elif mr.verdict == GuardVerdict.WARNING:
+                    print(f"  {branch} {Y}{mr.name}{RST}{sev_info}{reg_info}")
+                else:
+                    print(f"  {branch} {G}{mr.name}{RST} {G}clean{RST}{reg_info}")
+
+                for j, finding in enumerate(mr.findings):
+                    is_last_f = (j == len(mr.findings) - 1)
+                    f_branch = T_END if is_last_f else T_TEE
+                    tag = _sev_tag(finding.code, finding.severity)
+                    print(f"  {cont}{f_branch} {tag}: {finding.title}")
+                    f_cont = "    " if is_last_f else f"  {T_MID} "
+                    print(f"  {cont}{f_cont}{C}fix: {finding.remediation}{RST}")
+            print()
 
     # ── MCP Runtime ──
     if report.mcp_runtime_results:
         n_rt = len(report.mcp_runtime_results)
-        print(SEP)
-        print(f"  {B}MCP RUNTIME{RST}{' ' * (W - 11 - len(str(n_rt)) - 9)}{D}{n_rt} analyzed{RST}")
-        print(SEP)
-        print(f"  {D}{_col('NAME', W1)}  {_col('VERDICT', W2)}  {_col('TOOLS', 6)}  FINDINGS{RST}")
-        for rr in report.mcp_runtime_results:
-            name = rr.server_name[:W1]
+        print(f"  {T_DOT} {B}Runtime analysis - {n_rt} server(s){RST}")
+        print()
+        for i, rr in enumerate(report.mcp_runtime_results):
+            is_last = (i == len(report.mcp_runtime_results) - 1)
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
             if rr.connection_status != "connected":
-                print(f"  {_col(name, W1)}  {_col(f'{D}{rr.connection_status}{RST}', W2)}  {_col('-', 6)}  -")
+                print(f"  {branch} {D}{rr.server_name} ({rr.connection_status}){RST}")
             else:
-                tools = str(rr.tools_found)
-                nf = str(len(rr.findings))
-                print(f"  {_col(name, W1)}  {_col(_verdict(rr.verdict), W2)}  {_col(tools, 6)}  {nf}")
-            if verbose:
-                for finding in rr.findings:
-                    print(f"  {'':<{W1}}  {_sev(finding.severity)} {finding.code} {finding.title}")
+                color = R if rr.verdict == GuardVerdict.DANGER else (Y if rr.verdict == GuardVerdict.WARNING else G)
+                print(f"  {branch} {color}{rr.server_name}{RST} ({rr.tools_found} tools, {len(rr.findings)} findings)")
+                for j, finding in enumerate(rr.findings):
+                    is_last_f = (j == len(rr.findings) - 1)
+                    f_branch = T_END if is_last_f else T_TEE
+                    tag = _sev_tag(finding.code, finding.severity)
+                    print(f"  {cont}{f_branch} {tag}: {finding.title}")
         print()
 
     # ── Toxic Flows ──
     if report.toxic_flows:
         n_flows = len(report.toxic_flows)
-        print(SEP)
-        print(f"  {B}TOXIC FLOWS{RST}{' ' * (W - 11 - len(str(n_flows)) - 9)}{D}{n_flows} detected{RST}")
-        print(SEP)
-        print(f"  {D}{_col('RISK', 8)}  {_col('TITLE', 28)}  SERVERS{RST}")
-        for flow in report.toxic_flows:
+        print(f"  {T_DOT} {R}{B}{n_flows} toxic flow(s) detected{RST}")
+        print()
+        for i, flow in enumerate(report.toxic_flows):
+            is_last = (i == len(report.toxic_flows) - 1)
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
             level_color = R if flow.risk_level == "high" else Y
-            risk = f"{level_color}{flow.risk_level.upper()}{RST}"
-            title = flow.title[:27]
+            print(f"  {branch} {level_color}{flow.risk_level.upper()}{RST}: {flow.title}")
             servers = ", ".join(flow.servers_involved)
-            print(f"  {_col(risk, 8)}  {_col(title, 28)}  {servers}")
-            print(f"  {'':8}  {C}fix: {flow.remediation}{RST}")
+            print(f"  {cont}{D}servers: {servers}{RST}")
+            print(f"  {cont}{C}fix: {flow.remediation}{RST}")
         print()
 
     # ── Baseline Changes ──
     if report.baseline_changes:
         n_bl = len(report.baseline_changes)
-        print(SEP)
-        print(f"  {B}BASELINE CHANGES{RST}{' ' * (W - 16 - len(str(n_bl)) - 9)}{D}{n_bl} detected{RST}")
-        print(SEP)
-        print(f"  {D}{_col('SERVER', W1)}  {_col('TYPE', 16)}  DETAIL{RST}")
-        for change in report.baseline_changes:
-            name = change.server_name[:W1]
-            ctype = change.change_type[:15]
-            print(f"  {Y}{_col(name, W1)}{RST}  {_col(ctype, 16)}  {change.detail}")
+        print(f"  {T_DOT} {Y}{B}{n_bl} baseline change(s){RST}")
+        print()
+        for i, change in enumerate(report.baseline_changes):
+            is_last = (i == len(report.baseline_changes) - 1)
+            branch = T_END if is_last else T_TEE
+            print(f"  {branch} {Y}{change.server_name}{RST} - {change.change_type}: {change.detail}")
         print()
 
     # ── Unlisted (project config) ──
     if report.unlisted_findings:
         n_unlisted = len(report.unlisted_findings)
-        print(SEP)
-        print(f"  {B}POLICY{RST}{' ' * (W - 6 - len(str(n_unlisted)) - 9)}{D}{n_unlisted} unlisted{RST}")
-        print(SEP)
-        print(f"  {D}{_col('ITEM', W1)}  {_col('TYPE', W2)}  FINDING{RST}")
-        for uf in report.unlisted_findings:
-            name = uf.item_name[:W1]
-            v_str = _verdict(GuardVerdict.WARNING)
-            print(f"  {_col(name, W1)}  {_col(v_str, W2)}  {uf.description}")
+        print(f"  {T_DOT} {Y}{B}{n_unlisted} unlisted item(s){RST}")
+        print()
+        for i, uf in enumerate(report.unlisted_findings):
+            is_last = (i == len(report.unlisted_findings) - 1)
+            branch = T_END if is_last else T_TEE
+            print(f"  {branch} {Y}{uf.item_name}{RST}: {uf.description}")
         print()
 
     # ── Custom Rules ──
     if report.custom_findings:
         n_custom = len(report.custom_findings)
-        print(SEP)
-        print(f"  {B}CUSTOM RULES{RST}{' ' * (W - 12 - len(str(n_custom)) - 9)}{D}{n_custom} matched{RST}")
-        print(SEP)
-        print(f"  {D}{_col('RULE', 12)}  {_col('ENTITY', W1)}  {_col('VERDICT', W2)}  {_col('SEVERITY', W3)}  FINDING{RST}")
-        for cf in report.custom_findings:
-            entity_label = f"{cf.entity_name} ({cf.entity_type[:2]})"[:W1]
-            v_str = _verdict(GuardVerdict.DANGER if cf.verdict == "danger" else GuardVerdict.WARNING)
-            print(f"  {_col(cf.code, 12)}  {_col(entity_label, W1)}  {_col(v_str, W2)}  {_col(_sev(cf.severity), W3)}  {cf.title}")
+        print(f"  {T_DOT} {B}{n_custom} custom rule match(es){RST}")
+        print()
+        for i, cf in enumerate(report.custom_findings):
+            is_last = (i == len(report.custom_findings) - 1)
+            branch = T_END if is_last else T_TEE
+            cont = "    " if is_last else f"  {T_MID} "
+            tag = _sev_tag(cf.code, cf.severity)
+            print(f"  {branch} {tag}: {cf.title}")
+            print(f"  {cont}{D}{cf.entity_name} ({cf.entity_type}){RST}")
             if cf.remediation:
-                print(f"  {'':<12}  {'':<{W1}}  {C}fix: {cf.remediation}{RST}")
+                print(f"  {cont}{C}fix: {cf.remediation}{RST}")
         print()
 
     # ── Summary ──
-    print(SEP)
-
-    # Severity counts
     _sev_counts = _count_severities(report)
-    if any(_sev_counts.values()):
-        parts = []
-        for sev_name, color in [("critical", R), ("high", Y), ("medium", C), ("low", D)]:
-            n = _sev_counts.get(sev_name, 0)
-            if n > 0:
-                parts.append(f"{color}{sev_name} {n}{RST}")
-        print(f"  {B}SEVERITY{RST}   {'   '.join(parts)}")
+    sev_parts = []
+    for sev_name, color in [("critical", R), ("high", Y), ("medium", C), ("low", D)]:
+        n = _sev_counts.get(sev_name, 0)
+        if n > 0:
+            sev_parts.append(f"{color}{n} {sev_name}{RST}")
 
-    # Status
-    if report.has_critical:
-        print(f"  {B}STATUS{RST}     {R}{report.total_dangers} critical threat(s) found. Action required.{RST}")
-    elif report.total_toxic_flows > 0:
-        print(f"  {B}STATUS{RST}     {Y}{report.total_toxic_flows} toxic flow(s) detected. Review recommended.{RST}")
-    elif report.total_warnings > 0:
-        print(f"  {B}STATUS{RST}     {Y}{report.total_warnings} warning(s) found. Review recommended.{RST}")
+    if sev_parts:
+        print(f"  {T_DOT} {B}Summary:{RST} {', '.join(sev_parts)}")
     else:
-        print(f"  {B}STATUS{RST}     {G}No threats detected. Machine looks clean.{RST}")
+        print(f"  {T_DOT} {B}Summary:{RST} {G}clean{RST}")
 
-    print(SEP)
+    if report.has_critical:
+        print(f"    {R}{report.total_dangers} critical threat(s) found. Action required.{RST}")
+    elif report.total_toxic_flows > 0:
+        print(f"    {Y}{report.total_toxic_flows} toxic flow(s) detected. Review recommended.{RST}")
+    elif report.total_warnings > 0:
+        print(f"    {Y}{report.total_warnings} warning(s) found. Review recommended.{RST}")
+    else:
+        print(f"    {G}No threats detected. Machine looks clean.{RST}")
+    print()
 
     # ── Delta ──
     if delta:
         def _verdict_rank(v):
             return {"safe": 2, "warning": 1, "danger": 0, "error": 0}.get(v, -1)
 
-        print()
         ts_display = delta.previous_timestamp[:16].replace("T", " ")
-        print(SEP)
-        print(f"  {B}DELTA{RST}{' ' * (W - 5 - len(ts_display) - 4)}{D}vs {ts_display}{RST}")
-        print(SEP)
-        for entry in delta.entries:
+        print(f"  {T_DOT} {B}Delta{RST} {D}(vs {ts_display}){RST}")
+        print()
+        for i, entry in enumerate(delta.entries):
+            is_last = (i == len(delta.entries) - 1)
+            branch = T_END if is_last else T_TEE
             if entry.change_type in ("new", "new_entity"):
                 sev_color = R if entry.severity in ("critical", "high") else Y
-                prefix = f"  {sev_color}+ NEW{RST}"
-                if entry.code:
-                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
-                else:
-                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+                label = f"{sev_color}+ NEW{RST}"
+                detail = f"{entry.entity_name}: {entry.title}" if entry.title else entry.entity_name
+                print(f"  {branch} {label} {detail}")
             elif entry.change_type in ("resolved", "removed_entity"):
-                prefix = f"  {G}- RESOLVED{RST}"
-                if entry.code:
-                    detail = f"{_col(entry.code, 12)}{_col(entry.entity_name, W1)}  {entry.title}"
-                else:
-                    detail = f"{_col(entry.entity_name, W1 + 14)}{entry.title}"
+                label = f"{G}- RESOLVED{RST}"
+                detail = f"{entry.entity_name}: {entry.title}" if entry.title else entry.entity_name
+                print(f"  {branch} {label} {detail}")
             elif entry.change_type == "changed":
                 upgrade = _verdict_rank(entry.new_verdict) > _verdict_rank(entry.old_verdict)
                 color = G if upgrade else Y
-                prefix = f"  {color}~ CHANGED{RST}"
-                detail = f"{_col(entry.entity_name, W1 + 14)}{entry.old_verdict} -> {entry.new_verdict}"
-            else:
-                continue
-            print(f"{prefix}  {detail}")
+                label = f"{color}~ CHANGED{RST}"
+                print(f"  {branch} {label} {entry.entity_name}: {entry.old_verdict} -> {entry.new_verdict}")
         print()
 
-    # Actions
+    # ── Actions ──
     actions = report.all_actions
     for flow in report.toxic_flows:
         actions.append(flow.remediation)
     if actions:
-        print()
-        print(f"  {B}ACTIONS{RST}")
+        print(f"  {B}Actions:{RST}")
         for i, action in enumerate(actions, 1):
-            print(f"  {i}. {action}")
+            print(f"    {i}. {action}")
+        print()
 
-    print()
     print(f"  {D}Completed in {report.duration_seconds:.1f}s{RST}")
     print()
 
