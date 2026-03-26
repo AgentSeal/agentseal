@@ -1474,19 +1474,36 @@ def _run_guard(args):
                 else:
                     print(f"  {branch} {G}{mr.name}{RST} {G}clean{RST}{reg_info}")
 
-                # Show registry tools (max 5, then "... and N more")
+                # Show registry tools with verified/failed status
                 if mr.registry_tools:
-                    max_show = 5
-                    shown = mr.registry_tools[:max_show]
-                    for ti, tool_name in enumerate(shown):
-                        is_last_tool = (ti == len(shown) - 1) and len(mr.registry_tools) <= max_show and not mr.findings
+                    tools = mr.registry_tools
+                    failed = [t for t in tools if isinstance(t, dict) and t.get("status") == "failed"]
+                    verified = [t for t in tools if not isinstance(t, dict) or t.get("status") != "failed"]
+                    total = len(tools)
+
+                    if total > 12:
+                        # Many tools: show only failed, summarize verified
+                        shown = failed
+                    else:
+                        shown = tools
+
+                    for ti, tool in enumerate(shown):
+                        tname = tool.get("name", "?") if isinstance(tool, dict) else str(tool)
+                        tstatus = tool.get("status", "verified") if isinstance(tool, dict) else "verified"
+                        tfinding = tool.get("finding") if isinstance(tool, dict) else None
+                        tsev = tool.get("severity") if isinstance(tool, dict) else None
+                        is_last_tool = (ti == len(shown) - 1) and (total <= 12 or not verified) and not mr.findings
                         t_branch = T_END if is_last_tool else T_TEE
-                        print(f"  {cont}{t_branch} {D}tool      {tool_name}{RST}")
-                    if len(mr.registry_tools) > max_show:
-                        extra = len(mr.registry_tools) - max_show
-                        is_last_extra = not mr.findings
-                        e_branch = T_END if is_last_extra else T_TEE
-                        print(f"  {cont}{e_branch} {D}... and {extra} more{RST}")
+                        if tstatus == "failed" and tfinding:
+                            sev_c = _sev_color(tsev) if tsev else R
+                            print(f"  {cont}{t_branch} {D}tool{RST}  {D}{tname:<24}{RST} {sev_c}\u2718{RST} {sev_c}{tfinding}{RST}")
+                        else:
+                            print(f"  {cont}{t_branch} {D}tool{RST}  {D}{tname:<24}{RST} {G}\u2714{RST} {G}verified{RST}")
+
+                    if total > 12 and verified:
+                        is_last_v = not mr.findings
+                        v_branch = T_END if is_last_v else T_TEE
+                        print(f"  {cont}{v_branch} {G}\u2714 {len(verified)} more tools verified{RST}")
 
                 for j, finding in enumerate(mr.findings):
                     is_last_f = (j == len(mr.findings) - 1)

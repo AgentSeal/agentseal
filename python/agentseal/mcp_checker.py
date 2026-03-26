@@ -141,9 +141,14 @@ class MCPConfigChecker:
 
         verdict = _verdict_from_findings(findings)
 
+        # Build full command string for registry slug matching
+        full_command = command or url
+        if command and args:
+            full_command = command + " " + " ".join(str(a) for a in args)
+
         return MCPServerResult(
             name=name,
-            command=command or url,
+            command=full_command,
             source_file=source,
             verdict=verdict,
             findings=findings,

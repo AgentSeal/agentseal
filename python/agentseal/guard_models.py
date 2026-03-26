@@ -143,7 +143,7 @@ class MCPServerResult:
     registry_score: Optional[float] = None
     registry_level: Optional[str] = None          # EXCELLENT|HIGH|MEDIUM|LOW|CRITICAL
     registry_findings_count: Optional[int] = None
-    registry_tools: list[str] = field(default_factory=list)
+    registry_tools: list[dict] = field(default_factory=list)  # [{"name", "status", "finding", "severity"}]
 
     @property
     def top_finding(self) -> Optional[MCPFinding]:

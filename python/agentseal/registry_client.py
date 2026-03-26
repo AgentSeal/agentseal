@@ -36,7 +36,14 @@ def extract_package_slug(command: str) -> Optional[str]:
         return None
     runner = parts[0].rsplit("/", 1)[-1]  # basename
     if runner in ("npx", "bunx", "uvx", "pip", "pipx"):
-        pkg = parts[1]
+        # Skip flags like -y, --yes, -p, etc. to find the package name
+        pkg = None
+        for p in parts[1:]:
+            if not p.startswith("-"):
+                pkg = p
+                break
+        if not pkg:
+            return None
         pkg = re.sub(r"@[\d.]+$", "", pkg)  # strip @version
         return slugify(pkg)
     if runner == "docker" and len(parts) >= 3 and parts[1] == "run":
