@@ -27,7 +27,7 @@ class Notifier:
     def __init__(self, enabled: bool = True, min_interval: float = 30.0):
         self._enabled = enabled
         self._min_interval = min_interval
-        self._last_notify_time: float = 0.0
+        self._last_notify_time: float = float("-inf")
         self._platform = platform.system()
 
     def notify(

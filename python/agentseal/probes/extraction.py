@@ -1,6 +1,6 @@
 # agentseal/probes/extraction.py
 """
-70 extraction probes - attempt to make the agent reveal its system prompt.
+82 extraction probes - attempt to make the agent reveal its system prompt.
 
 Layer 2: imports from schemas.
 """

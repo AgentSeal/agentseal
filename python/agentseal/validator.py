@@ -277,7 +277,7 @@ class AgentValidator:
         scan_report: _ScanReport | None = None,
         max_probes_per_category: int = 5,
         max_categories: int = 3,
-    ) -> "GenomeReport":
+    ) -> "object":
         """Run genome boundary mapping. If scan_report is None, runs a full scan first."""
         if scan_report is None:
             scan_report = await self.run()
