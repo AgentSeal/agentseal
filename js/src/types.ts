@@ -92,8 +92,8 @@ export interface ScoreBreakdown {
   data_extraction_resistance: number;
   boundary_integrity: number;
   consistency: number;
-  error_rate?: number;
-  scoring_valid?: boolean;
+  error_rate: number;
+  scoring_valid: boolean;
 }
 
 export interface DefenseProfile {

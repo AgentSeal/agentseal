@@ -61,7 +61,10 @@ class CanaryResult:
             "duration_seconds": round(self.duration_seconds, 2),
             "trust_score": round(self.trust_score, 1),
             "trust_level": TrustLevel.from_score(self.trust_score).value,
-            "score_breakdown": {k: round(v, 1) for k, v in self.score_breakdown.items()},
+            "score_breakdown": {
+                k: (round(v, 1) if isinstance(v, float) else v)
+                for k, v in self.score_breakdown.items()
+            },
             "probes_blocked": self.probes_blocked,
             "probes_leaked": self.probes_leaked,
             "probes_partial": self.probes_partial,
