@@ -82,6 +82,7 @@ async function buildValidator(
     timeout?: number;
     verbose?: boolean;
     adaptive?: boolean;
+    probes?: Array<Record<string, any>>;
   },
 ): Promise<AgentValidator> {
   const model = args.model;
@@ -96,6 +97,7 @@ async function buildValidator(
     timeoutPerProbe: args.timeout ?? 30,
     verbose: args.verbose ?? false,
     adaptive: args.adaptive ?? false,
+    ...(args.probes ? { probes: args.probes as any } : {}),
   };
 
   // Ollama
@@ -240,6 +242,12 @@ program
   .action(async (inlinePrompt, opts) => {
     printBanner();
 
+    // Load config defaults
+    const savedConfig = loadConfig();
+    if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+    if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+    if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
+
     let systemPrompt: string | undefined;
 
     if (opts.prompt) {
@@ -276,8 +284,16 @@ program
     if (opts.claudeDesktop && !systemPrompt) {
       const { homedir } = await import("node:os");
       const cdPath = join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
-      if (existsSync(cdPath)) {
-        console.log(`  Found Claude Desktop config: ${cdPath}\n`);
+      const linuxPath = join(homedir(), ".config", "Claude", "claude_desktop_config.json");
+      const actualPath = existsSync(cdPath) ? cdPath : existsSync(linuxPath) ? linuxPath : null;
+      if (actualPath) {
+        try {
+          const config = JSON.parse(readFileSync(actualPath, "utf-8"));
+          console.log(`  Found Claude Desktop config: ${actualPath}`);
+          if (config.systemPrompt) {
+            systemPrompt = config.systemPrompt;
+          }
+        } catch { /* ignore parse errors */ }
       }
     }
 
@@ -626,6 +642,12 @@ const guardCmd = program
   .option("--llm-all", "Run LLM on all skills, not just suspicious")
   .action(async (scanPath: string | undefined, opts: Record<string, any>) => {
     try {
+      // Load config defaults
+      const savedConfig = loadConfig();
+      if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+      if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+      if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
+
       // Handle --reset-baselines
       if (opts.resetBaselines) {
         const store = new BaselineStore();
@@ -691,16 +713,19 @@ const guardCmd = program
           ? skills
           : skills.filter((s: any) => s.verdict === "warning");
         for (const skill of toJudge) {
-          if (skill.content) {
+          if (skill.path && existsSync(skill.path)) {
             try {
-              const result = await judge.analyzeSkill(skill.content, skill.name);
+              const skillContent = readFileSync(skill.path, "utf-8");
+              const result = await judge.analyzeSkill(skillContent, skill.name);
               if (result.verdict === "danger" && skill.verdict !== "danger") {
                 skill.verdict = "danger";
                 skill.findings.push(...result.findings.map((f: any) => ({
                   code: "LLM_JUDGE",
                   severity: f.severity ?? "medium",
                   title: f.title,
-                  detail: f.evidence ?? f.reasoning ?? "",
+                  description: f.reasoning ?? "",
+                  evidence: f.evidence ?? "",
+                  remediation: "",
                 })));
               }
             } catch { /* LLM judge is best-effort */ }
@@ -969,7 +994,7 @@ program
       if (entries.length === 0) { console.log("No quarantined skills."); return; }
       console.log(`\n  ${B}Quarantined Skills${R}\n`);
       for (const e of entries) {
-        console.log(`  ${RED}●${R} ${e.name}  ${e.reason ?? ""}  (${e.date})`);
+        console.log(`  ${RED}●${R} ${e.skill_name}  ${e.reason ?? ""}  (${e.timestamp})`);
       }
       console.log();
       return;
@@ -1005,13 +1030,13 @@ program
     if (opts.fromScan) {
       const report = loadScanReport(opts.report);
       const remediation = generateRemediation(report as unknown as ScanReport);
-      if (remediation.hardened_prompt) {
+      if (remediation.combined_fix) {
         if (opts.output) {
-          writeFileSync(opts.output, remediation.hardened_prompt);
+          writeFileSync(opts.output, remediation.combined_fix);
           console.log(`${G}Hardened prompt saved to${R} ${opts.output}`);
         } else {
           console.log(`\n${B}Hardened Prompt:${R}\n`);
-          console.log(remediation.hardened_prompt);
+          console.log(remediation.combined_fix);
         }
       } else {
         console.log("No remediation needed — scan looks clean.");
@@ -1187,6 +1212,12 @@ program
   .option("--timeout <seconds>", "Timeout per probe", "30")
   .argument("[prompt]", "Quick inline prompt")
   .action(async (inlinePrompt, opts) => {
+    // Load config defaults
+    const savedConfig = loadConfig();
+    if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+    if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+    if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
+
     const systemPrompt = opts.prompt ?? inlinePrompt ?? (opts.file ? readFileSync(opts.file, "utf-8").trim() : undefined);
     if (!systemPrompt && !opts.url) {
       console.error("Error: Provide --prompt, --file, or --url");
@@ -1203,6 +1234,7 @@ program
         agentName: opts.name,
         concurrency: parseInt(opts.concurrency),
         timeoutPerProbe: parseFloat(opts.timeout),
+        probes: canaryProbes as any,
       });
     } else {
       validator = await buildValidator(systemPrompt!, {
@@ -1212,6 +1244,7 @@ program
         name: opts.name,
         concurrency: parseInt(opts.concurrency),
         timeout: parseFloat(opts.timeout),
+        probes: canaryProbes,
       });
     }
 

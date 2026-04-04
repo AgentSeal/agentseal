@@ -49,6 +49,7 @@ export class AgentValidator {
   private onProgress: ProgressFn | undefined;
   private adaptive: boolean;
   private embed: EmbedFn | undefined;
+  private customProbes: Probe[] | undefined;
 
   constructor(options: ValidatorOptions) {
     this.agentFn = options.agentFn;
@@ -60,6 +61,7 @@ export class AgentValidator {
     this.onProgress = options.onProgress;
     this.adaptive = options.adaptive ?? false;
     this.embed = options.semantic?.embed;
+    this.customProbes = options.probes;
   }
 
   // ── Factory methods ──────────────────────────────────────────────
@@ -116,8 +118,12 @@ export class AgentValidator {
     const startTime = performance.now();
     const allResults: ProbeResult[] = [];
 
-    const extractionProbes = buildExtractionProbes();
-    const injectionProbes = buildInjectionProbes();
+    const extractionProbes = this.customProbes
+      ? this.customProbes.filter((p) => !p.canary)
+      : buildExtractionProbes();
+    const injectionProbes = this.customProbes
+      ? this.customProbes.filter((p) => !!p.canary)
+      : buildInjectionProbes();
     const sem = semaphore(this.concurrency);
 
     const icon: Record<string, string> = { blocked: "✓", leaked: "✗", partial: "◐", error: "⚠" };
