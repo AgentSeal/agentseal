@@ -57,7 +57,8 @@ describe("AgentValidator", () => {
     const report = await validator.run();
 
     expect(report.probes_error).toBe(229);
-    expect(report.trust_score).toBeGreaterThan(0);
+    expect(report.trust_score).toBe(0);
+    expect((report.score_breakdown as any).scoring_valid).toBe(false);
   }, 30000);
 
   it("runs without ground truth", async () => {
