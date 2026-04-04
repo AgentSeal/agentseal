@@ -12,6 +12,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig, saveConfigKey, removeConfigKey, showConfig, CONFIG_KEYS } from "../src/config.js";
+import { Shield } from "../src/shield.js";
+import { renderMCPResults, type MCPScanResult } from "../src/scan-mcp-cli.js";
+import { MCPConfigChecker, verdictFromFindings } from "../src/mcp-checker.js";
+import { selectCanaryProbes } from "../src/watch.js";
 import { listProfiles } from "../src/profiles.js";
 import { bulkCheck } from "../src/registry-client.js";
 import {
@@ -934,6 +938,217 @@ program
     }
 
     console.log("Usage: agentseal fix --from-guard | --from-scan | --list-quarantine | --restore <name>");
+  });
+
+program
+  .command("shield")
+  .description("Continuously monitor your machine for AI agent threats")
+  .option("--no-notify", "Disable desktop notifications")
+  .option("--debounce <seconds>", "Seconds to wait after change before scanning", "2")
+  .option("-q, --quiet", "Suppress terminal output")
+  .option("--reset-baselines", "Reset MCP server baselines before starting")
+  .action(async (opts) => {
+    printBanner();
+    console.log("  Starting Shield — continuous monitoring...");
+    console.log("  Press Ctrl+C to stop.\n");
+
+    if (opts.resetBaselines) {
+      const store = new BaselineStore();
+      store.reset();
+      console.log("  Baselines reset.\n");
+    }
+
+    const shield = new Shield({
+      debounceSeconds: parseFloat(opts.debounce),
+      notify: opts.notify !== false,
+      onEvent: (eventType, filePath, summary) => {
+        if (!opts.quiet) {
+          const color = eventType === "threat" ? "\x1b[31m" : eventType === "warning" ? "\x1b[33m" : "\x1b[90m";
+          console.log(`  ${color}[${eventType.toUpperCase()}]\x1b[0m ${filePath} — ${summary}`);
+        }
+      },
+    });
+
+    process.on("SIGINT", () => {
+      console.log("\n  Shield stopped.");
+      shield.stop();
+      process.exit(0);
+    });
+
+    const { dirsWatched, filesWatched } = shield.start();
+    console.log(`  Watching ${dirsWatched} director${dirsWatched === 1 ? "y" : "ies"} (${filesWatched} individual files).\n`);
+
+    // Keep the process alive until SIGINT
+    await new Promise<void>(() => {});
+  });
+
+program
+  .command("scan-mcp")
+  .description("Runtime MCP server scanner — connect, analyze, score")
+  .option("--server <name>", "Scan only this server (by name)")
+  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("--save <file>", "Save JSON report to file")
+  .option("--min-score <score>", "Exit code 1 if any server scores below threshold")
+  .option("-v, --verbose", "Show individual tool findings")
+  .option("--reset-baselines", "Reset all MCP server baselines")
+  .action(async (opts) => {
+    printBanner();
+
+    if (opts.resetBaselines) {
+      const store = new BaselineStore();
+      const count = store.reset();
+      console.log(`Reset ${count} baseline(s).\n`);
+    }
+
+    const checker = new MCPConfigChecker();
+    console.log("  Discovering MCP servers...\n");
+
+    // Read MCP configs from well-known locations and check each server
+    const { getWellKnownConfigs, stripJsonComments } = await import("../src/machine-discovery.js");
+    const { readFileSync: rfs, existsSync: efs } = await import("node:fs");
+    const { homedir } = await import("node:os");
+
+    const home = homedir();
+    const plat = process.platform === "darwin" ? "Darwin" : process.platform === "win32" ? "Windows" : "Linux";
+    const configs = getWellKnownConfigs();
+
+    const serverDicts: Array<Record<string, any>> = [];
+    for (const cfg of configs) {
+      const paths = cfg.paths as Record<string, string | undefined>;
+      let cfgPath = paths[plat] ?? paths["all"];
+      if (!cfgPath) continue;
+      cfgPath = cfgPath.replace(/^~/, home);
+      if (!efs(cfgPath)) continue;
+
+      let data: Record<string, any>;
+      try {
+        const raw = rfs(cfgPath, "utf-8");
+        data = JSON.parse(stripJsonComments(raw));
+      } catch {
+        continue;
+      }
+
+      let servers: Record<string, any> = {};
+      for (const key of ["mcpServers", "servers", "context_servers"]) {
+        if (key in data && typeof data[key] === "object" && data[key] !== null) {
+          servers = data[key];
+          break;
+        }
+      }
+
+      for (const [srvName, srvCfg] of Object.entries(servers)) {
+        if (typeof srvCfg !== "object" || srvCfg === null) continue;
+        if (opts.server && srvName !== opts.server) continue;
+        serverDicts.push({ name: srvName, source_file: cfgPath, ...srvCfg });
+      }
+    }
+
+    if (serverDicts.length === 0) {
+      console.log("  No MCP servers found. Check your agent configuration.");
+      return;
+    }
+
+    console.log(`  Found ${serverDicts.length} server(s). Scanning...\n`);
+
+    const results: MCPScanResult[] = [];
+    for (const serverDict of serverDicts) {
+      const result = checker.check(serverDict);
+      const verdictStr = verdictFromFindings(result.findings);
+      results.push({
+        server_name: result.name,
+        verdict: verdictStr,
+        findings: result.findings.map((f) => ({
+          code: f.code,
+          severity: f.severity,
+          title: f.title,
+          detail: f.description,
+        })),
+        tools_count: 0,
+      });
+    }
+
+    if (opts.output === "json") {
+      console.log(JSON.stringify(results, null, 2));
+    } else {
+      renderMCPResults(results, opts.verbose);
+    }
+
+    if (opts.save) {
+      writeFileSync(opts.save, JSON.stringify(results, null, 2));
+      console.log(`Report saved to ${opts.save}`);
+    }
+
+    if (opts.minScore) {
+      const threshold = parseInt(opts.minScore);
+      const failing = results.filter((r) => r.trust_score !== undefined && r.trust_score < threshold);
+      if (failing.length > 0) {
+        console.error(`\nCI check failed: ${failing.length} server(s) below threshold ${threshold}`);
+        process.exit(1);
+      }
+    }
+  });
+
+program
+  .command("watch")
+  .description("Run canary regression scan (5 probes, for CI/cron)")
+  .option("-p, --prompt <text>", "System prompt to test")
+  .option("-f, --file <path>", "Path to file containing system prompt")
+  .option("--url <url>", "HTTP endpoint URL to test")
+  .option("-m, --model <name>", "Model to test")
+  .option("--api-key <key>", "API key")
+  .option("--ollama-url <url>", "Ollama base URL", "http://localhost:11434")
+  .option("--canary-probes <csv>", "Comma-separated probe IDs")
+  .option("--min-score <score>", "Exit code 1 if below")
+  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("--name <name>", "Agent name", "My Agent")
+  .option("--concurrency <n>", "Max parallel probes", "3")
+  .option("--timeout <seconds>", "Timeout per probe", "30")
+  .argument("[prompt]", "Quick inline prompt")
+  .action(async (inlinePrompt, opts) => {
+    const systemPrompt = opts.prompt ?? inlinePrompt ?? (opts.file ? readFileSync(opts.file, "utf-8").trim() : undefined);
+    if (!systemPrompt && !opts.url) {
+      console.error("Error: Provide --prompt, --file, or --url");
+      process.exit(1);
+    }
+
+    const canaryProbes = selectCanaryProbes(opts.canaryProbes);
+    console.log(`  Running ${canaryProbes.length} canary probes...\n`);
+
+    let validator: AgentValidator;
+    if (opts.url) {
+      validator = AgentValidator.fromEndpoint({
+        url: opts.url,
+        agentName: opts.name,
+        concurrency: parseInt(opts.concurrency),
+        timeoutPerProbe: parseFloat(opts.timeout),
+      });
+    } else {
+      validator = await buildValidator(systemPrompt!, {
+        model: opts.model,
+        apiKey: opts.apiKey,
+        ollamaUrl: opts.ollamaUrl,
+        name: opts.name,
+        concurrency: parseInt(opts.concurrency),
+        timeout: parseFloat(opts.timeout),
+      });
+    }
+
+    const report = await validator.run();
+
+    if (opts.output === "json") {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`  Score: ${report.trust_score.toFixed(1)}/100`);
+      console.log(`  Blocked: ${report.probes_blocked}  Leaked: ${report.probes_leaked}`);
+    }
+
+    if (opts.minScore) {
+      const threshold = parseInt(opts.minScore);
+      if (report.trust_score < threshold) {
+        console.error(`\n  CI check failed: ${report.trust_score.toFixed(1)} < ${threshold}`);
+        process.exit(1);
+      }
+    }
   });
 
 program.parse();
