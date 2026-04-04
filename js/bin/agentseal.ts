@@ -8,6 +8,8 @@ import { generateRemediation } from "../src/remediation.js";
 import { compareReports } from "../src/compare.js";
 import type { ScanReport } from "../src/types.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Guard } from "../src/guard.js";
 import {
@@ -30,7 +32,8 @@ import {
 } from "../src/guard-models.js";
 import { computeDelta, HistoryStore } from "../src/history.js";
 
-const VERSION = "0.1.0";
+const __pkgdir = join(dirname(fileURLToPath(import.meta.url)), "..");
+const VERSION = JSON.parse(readFileSync(join(__pkgdir, "package.json"), "utf-8")).version as string;
 
 function printBanner() {
   const R = "\x1b[0m";
