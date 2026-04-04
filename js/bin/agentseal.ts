@@ -16,7 +16,7 @@ import { Shield } from "../src/shield.js";
 import { renderMCPResults, type MCPScanResult } from "../src/scan-mcp-cli.js";
 import { MCPConfigChecker, verdictFromFindings } from "../src/mcp-checker.js";
 import { selectCanaryProbes } from "../src/watch.js";
-import { listProfiles } from "../src/profiles.js";
+import { listProfiles, resolveProfile, applyProfile } from "../src/profiles.js";
 import { bulkCheck } from "../src/registry-client.js";
 import {
   quarantineSkill,
@@ -224,7 +224,7 @@ program
   .option("--ollama-url <url>", "Ollama base URL", "http://localhost:11434")
   .option("--message-field <field>", "HTTP request message field", "message")
   .option("--response-field <field>", "HTTP response field", "response")
-  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("-o, --output <format>", "Output format: terminal, json, sarif", "terminal")
   .option("--save <path>", "Save JSON report to file")
   .option("--name <name>", "Agent name for report", "My Agent")
   .option("--concurrency <n>", "Max parallel probes", "3")
@@ -233,6 +233,9 @@ program
   .option("--adaptive", "Enable adaptive mutation phase")
   .option("--min-score <score>", "Exit code 1 if below (CI mode)")
   .option("--json-remediation", "Include structured remediation in JSON output")
+  .option("--profile <name>", "Scan profile: quick, default, code-agent, support-bot, rag-agent, mcp-heavy, full, ci")
+  .option("--cursor", "Auto-detect Cursor IDE system prompt")
+  .option("--claude-desktop", "Auto-detect Claude Desktop system prompt")
   .argument("[prompt]", "Quick inline prompt")
   .action(async (inlinePrompt, opts) => {
     printBanner();
@@ -245,6 +248,37 @@ program
       systemPrompt = inlinePrompt;
     } else if (opts.file) {
       systemPrompt = readFileSync(opts.file, "utf-8").trim();
+    }
+
+    // Profile support
+    if (opts.profile) {
+      const profile = resolveProfile(opts.profile);
+      applyProfile(opts, profile);
+    }
+
+    // IDE auto-detection
+    if (opts.cursor && !systemPrompt) {
+      const { homedir } = await import("node:os");
+      const cursorPaths = [
+        join(homedir(), ".cursor", "User", "globalStorage", "cursor.rules"),
+        ".cursorrules",
+        ".cursor/rules",
+      ];
+      for (const p of cursorPaths) {
+        if (existsSync(p)) {
+          systemPrompt = readFileSync(p, "utf-8").trim();
+          console.log(`  Auto-detected Cursor prompt: ${p}\n`);
+          break;
+        }
+      }
+    }
+
+    if (opts.claudeDesktop && !systemPrompt) {
+      const { homedir } = await import("node:os");
+      const cdPath = join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+      if (existsSync(cdPath)) {
+        console.log(`  Found Claude Desktop config: ${cdPath}\n`);
+      }
     }
 
     let validator: AgentValidator;
@@ -288,6 +322,20 @@ program
       }
       const json = JSON.stringify(output, null, 2);
       console.log(json);
+    } else if (opts.output === "sarif") {
+      const sarif = {
+        $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [{
+          tool: { driver: { name: "agentseal", version: VERSION } },
+          results: report.results.filter((r: any) => r.verdict === "leaked").map((r: any) => ({
+            ruleId: r.probe_id,
+            level: r.severity === "CRITICAL" || r.severity === "HIGH" ? "error" : "warning",
+            message: { text: r.reasoning },
+          })),
+        }],
+      };
+      console.log(JSON.stringify(sarif, null, 2));
     } else {
       printReport(report);
 
@@ -572,6 +620,10 @@ const guardCmd = program
   .option("-o, --output <format>", "output format: terminal|json|sarif", "terminal")
   .option("--save <path>", "save JSON report to file")
   .option("--reset-baselines", "re-trust all MCP servers")
+  .option("--model <name>", "LLM model for judge-based skill scanning")
+  .option("--api-key <key>", "API key for LLM judge")
+  .option("--ollama-url <url>", "Ollama base URL for LLM judge", "http://localhost:11434")
+  .option("--llm-all", "Run LLM on all skills, not just suspicious")
   .action(async (scanPath: string | undefined, opts: Record<string, any>) => {
     try {
       // Handle --reset-baselines
@@ -625,6 +677,36 @@ const guardCmd = program
       });
 
       const report = await guard.run();
+
+      // LLM Judge pass (optional)
+      if (opts.model) {
+        const { LLMJudge } = await import("../src/llm-judge.js");
+        const judge = new LLMJudge({
+          model: opts.model,
+          apiKey: opts.apiKey,
+          baseUrl: opts.model?.startsWith("ollama/") ? opts.ollamaUrl + "/v1" : undefined,
+        });
+        const skills = report.skill_results ?? [];
+        const toJudge = opts.llmAll
+          ? skills
+          : skills.filter((s: any) => s.verdict === "warning");
+        for (const skill of toJudge) {
+          if (skill.content) {
+            try {
+              const result = await judge.analyzeSkill(skill.content, skill.name);
+              if (result.verdict === "danger" && skill.verdict !== "danger") {
+                skill.verdict = "danger";
+                skill.findings.push(...result.findings.map((f: any) => ({
+                  code: "LLM_JUDGE",
+                  severity: f.severity ?? "medium",
+                  title: f.title,
+                  detail: f.evidence ?? f.reasoning ?? "",
+                })));
+              }
+            } catch { /* LLM judge is best-effort */ }
+          }
+        }
+      }
 
       // Compute delta if diff is enabled
       let delta: { total_new: number; total_resolved: number; total_changed: number; entries: DeltaEntry[] } | null = null;
