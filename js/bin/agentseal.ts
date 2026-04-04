@@ -12,6 +12,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig, saveConfigKey, removeConfigKey, showConfig, CONFIG_KEYS } from "../src/config.js";
+import { listProfiles } from "../src/profiles.js";
+import { bulkCheck } from "../src/registry-client.js";
+import {
+  quarantineSkill,
+  restoreSkill,
+  listQuarantine,
+  loadGuardReport,
+  loadScanReport,
+  getFixableSkills,
+} from "../src/fix.js";
 import { saveCredentials, saveLicense } from "../src/login.js";
 import { Guard } from "../src/guard.js";
 import {
@@ -811,6 +821,119 @@ program
     if (!key) { console.error("Usage: agentseal activate <license-key>"); process.exit(1); }
     saveLicense(key);
     console.log(`\x1b[32mLicense activated.\x1b[0m`);
+  });
+
+program
+  .command("profiles")
+  .description("List available scan profiles")
+  .action(() => {
+    console.log(listProfiles());
+  });
+
+program
+  .command("registry")
+  .description("Manage the MCP server registry")
+  .argument("[action]", "info | update | list", "info")
+  .option("--api-url <url>", "Custom API URL", "https://agentseal.org/api/v1")
+  .action(async (action, opts) => {
+    switch (action) {
+      case "info":
+        console.log("  AgentSeal MCP Server Registry");
+        console.log("  Ships with bundled trust scores. Use 'update' to fetch latest.");
+        break;
+      case "update":
+        console.log("  Fetching latest registry data...");
+        try {
+          const results = await bulkCheck([], opts.apiUrl);
+          console.log(`  \x1b[32mUpdated.\x1b[0m ${Object.keys(results).length} servers in registry.`);
+        } catch (err) {
+          console.error(`  Error fetching registry: ${err}`);
+          process.exit(1);
+        }
+        break;
+      case "list":
+        console.log("  Use the web registry at https://agentseal.org/mcp for full browsing.");
+        console.log("  Or run: agentseal guard --verbose to see registry scores for your servers.");
+        break;
+      default:
+        console.error(`Unknown action: ${action}. Use info, update, or list.`);
+        process.exit(1);
+    }
+  });
+
+program
+  .command("fix")
+  .description("Fix dangerous skills and harden prompts")
+  .option("--from-guard", "Load guard report and quarantine dangerous skills")
+  .option("--from-scan", "Load scan report and generate hardened prompt")
+  .option("--report <file>", "Path to report file (instead of latest)")
+  .option("--auto", "Quarantine all DANGER skills without prompting")
+  .option("--dry-run", "Show what would be done without doing it")
+  .option("--list-quarantine", "List quarantined skills")
+  .option("--restore <name>", "Restore a quarantined skill by name")
+  .option("--output <file>", "Save hardened prompt to file")
+  .action(async (opts) => {
+    const R = "\x1b[0m";
+    const G = "\x1b[32m";
+    const RED = "\x1b[31m";
+    const B = "\x1b[1m";
+
+    if (opts.listQuarantine) {
+      const entries = listQuarantine();
+      if (entries.length === 0) { console.log("No quarantined skills."); return; }
+      console.log(`\n  ${B}Quarantined Skills${R}\n`);
+      for (const e of entries) {
+        console.log(`  ${RED}●${R} ${e.name}  ${e.reason ?? ""}  (${e.date})`);
+      }
+      console.log();
+      return;
+    }
+
+    if (opts.restore) {
+      try {
+        const restored = restoreSkill(opts.restore);
+        console.log(`${G}Restored:${R} ${restored}`);
+      } catch (err) {
+        console.error(`Error: ${err}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (opts.fromGuard) {
+      const report = loadGuardReport(opts.report);
+      const fixable = getFixableSkills(report);
+      if (fixable.length === 0) { console.log("No dangerous skills to fix."); return; }
+      console.log(`\n  ${B}Fixable Skills${R} (${fixable.length})\n`);
+      for (const s of fixable) {
+        const label = opts.dryRun ? "[DRY RUN] Would quarantine" : "Quarantining";
+        console.log(`  ${RED}●${R} ${label}: ${s.name}`);
+        if (!opts.dryRun) {
+          quarantineSkill(s.path, s.name, s.findings?.[0]?.title);
+        }
+      }
+      console.log();
+      return;
+    }
+
+    if (opts.fromScan) {
+      const report = loadScanReport(opts.report);
+      const remediation = generateRemediation(report as unknown as ScanReport);
+      if (remediation.hardened_prompt) {
+        if (opts.output) {
+          writeFileSync(opts.output, remediation.hardened_prompt);
+          console.log(`${G}Hardened prompt saved to${R} ${opts.output}`);
+        } else {
+          console.log(`\n${B}Hardened Prompt:${R}\n`);
+          console.log(remediation.hardened_prompt);
+        }
+      } else {
+        console.log("No remediation needed — scan looks clean.");
+      }
+      return;
+    }
+
+    console.log("Usage: agentseal fix --from-guard | --from-scan | --list-quarantine | --restore <name>");
   });
 
 program.parse();
