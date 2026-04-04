@@ -621,6 +621,9 @@ class AgentValidator:
 
         # ── Phase 6: Score ───────────────────────────────────────────
         scores = _compute_scores(all_results)
+        if not scores.get("scoring_valid", True):
+            if self.verbose:
+                print("\n  ⚠  All probes errored — no valid trust score. Check your model endpoint.\n")
         trust_level = _TrustLevel.from_score(scores["overall"])
 
         duration = time.time() - start_time
