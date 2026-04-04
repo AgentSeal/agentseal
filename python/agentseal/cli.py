@@ -2198,6 +2198,14 @@ async def _run_scan(args):
 
     report = await validator.run()
 
+    if not report.score_breakdown.get("scoring_valid", True):
+        print("\n\x1b[31mError: All probes failed. Trust score is not valid.\x1b[0m")
+        print("Check your model endpoint is running and accessible.\n")
+        sys.exit(2)
+
+    if report.score_breakdown.get("error_rate", 0) > 0.5:
+        print(f"\n\x1b[33mWarning: {report.probes_error}/{report.total_probes} probes errored. Score may be unreliable.\x1b[0m\n")
+
     # ── Genome scan (if --genome) ─────────────────────────────────────
     genome_report = None
     if args.genome:
