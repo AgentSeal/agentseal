@@ -8,7 +8,25 @@ import { generateRemediation } from "../src/remediation.js";
 import { compareReports } from "../src/compare.js";
 import type { ScanReport } from "../src/types.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { loadConfig, saveConfigKey, removeConfigKey, showConfig, CONFIG_KEYS } from "../src/config.js";
+import { Shield } from "../src/shield.js";
+import { renderMCPResults, type MCPScanResult } from "../src/scan-mcp-cli.js";
+import { MCPConfigChecker, verdictFromFindings } from "../src/mcp-checker.js";
+import { selectCanaryProbes } from "../src/watch.js";
+import { listProfiles, resolveProfile, applyProfile } from "../src/profiles.js";
+import { bulkCheck } from "../src/registry-client.js";
+import {
+  quarantineSkill,
+  restoreSkill,
+  listQuarantine,
+  loadGuardReport,
+  loadScanReport,
+  getFixableSkills,
+} from "../src/fix.js";
+import { saveCredentials, saveLicense } from "../src/login.js";
 import { Guard } from "../src/guard.js";
 import {
   resolveProjectConfig,
@@ -30,7 +48,8 @@ import {
 } from "../src/guard-models.js";
 import { computeDelta, HistoryStore } from "../src/history.js";
 
-const VERSION = "0.1.0";
+const __pkgdir = join(dirname(fileURLToPath(import.meta.url)), "..");
+const VERSION = JSON.parse(readFileSync(join(__pkgdir, "package.json"), "utf-8")).version as string;
 
 function printBanner() {
   const R = "\x1b[0m";
@@ -63,6 +82,7 @@ async function buildValidator(
     timeout?: number;
     verbose?: boolean;
     adaptive?: boolean;
+    probes?: Array<Record<string, any>>;
   },
 ): Promise<AgentValidator> {
   const model = args.model;
@@ -77,6 +97,7 @@ async function buildValidator(
     timeoutPerProbe: args.timeout ?? 30,
     verbose: args.verbose ?? false,
     adaptive: args.adaptive ?? false,
+    ...(args.probes ? { probes: args.probes as any } : {}),
   };
 
   // Ollama
@@ -205,7 +226,7 @@ program
   .option("--ollama-url <url>", "Ollama base URL", "http://localhost:11434")
   .option("--message-field <field>", "HTTP request message field", "message")
   .option("--response-field <field>", "HTTP response field", "response")
-  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("-o, --output <format>", "Output format: terminal, json, sarif", "terminal")
   .option("--save <path>", "Save JSON report to file")
   .option("--name <name>", "Agent name for report", "My Agent")
   .option("--concurrency <n>", "Max parallel probes", "3")
@@ -214,9 +235,18 @@ program
   .option("--adaptive", "Enable adaptive mutation phase")
   .option("--min-score <score>", "Exit code 1 if below (CI mode)")
   .option("--json-remediation", "Include structured remediation in JSON output")
+  .option("--profile <name>", "Scan profile: quick, default, code-agent, support-bot, rag-agent, mcp-heavy, full, ci")
+  .option("--cursor", "Auto-detect Cursor IDE system prompt")
+  .option("--claude-desktop", "Auto-detect Claude Desktop system prompt")
   .argument("[prompt]", "Quick inline prompt")
   .action(async (inlinePrompt, opts) => {
     printBanner();
+
+    // Load config defaults
+    const savedConfig = loadConfig();
+    if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+    if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+    if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
 
     let systemPrompt: string | undefined;
 
@@ -226,6 +256,45 @@ program
       systemPrompt = inlinePrompt;
     } else if (opts.file) {
       systemPrompt = readFileSync(opts.file, "utf-8").trim();
+    }
+
+    // Profile support
+    if (opts.profile) {
+      const profile = resolveProfile(opts.profile);
+      applyProfile(opts, profile);
+    }
+
+    // IDE auto-detection
+    if (opts.cursor && !systemPrompt) {
+      const { homedir } = await import("node:os");
+      const cursorPaths = [
+        join(homedir(), ".cursor", "User", "globalStorage", "cursor.rules"),
+        ".cursorrules",
+        ".cursor/rules",
+      ];
+      for (const p of cursorPaths) {
+        if (existsSync(p)) {
+          systemPrompt = readFileSync(p, "utf-8").trim();
+          console.log(`  Auto-detected Cursor prompt: ${p}\n`);
+          break;
+        }
+      }
+    }
+
+    if (opts.claudeDesktop && !systemPrompt) {
+      const { homedir } = await import("node:os");
+      const cdPath = join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+      const linuxPath = join(homedir(), ".config", "Claude", "claude_desktop_config.json");
+      const actualPath = existsSync(cdPath) ? cdPath : existsSync(linuxPath) ? linuxPath : null;
+      if (actualPath) {
+        try {
+          const config = JSON.parse(readFileSync(actualPath, "utf-8"));
+          console.log(`  Found Claude Desktop config: ${actualPath}`);
+          if (config.systemPrompt) {
+            systemPrompt = config.systemPrompt;
+          }
+        } catch { /* ignore parse errors */ }
+      }
     }
 
     let validator: AgentValidator;
@@ -269,6 +338,20 @@ program
       }
       const json = JSON.stringify(output, null, 2);
       console.log(json);
+    } else if (opts.output === "sarif") {
+      const sarif = {
+        $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [{
+          tool: { driver: { name: "agentseal", version: VERSION } },
+          results: report.results.filter((r: any) => r.verdict === "leaked").map((r: any) => ({
+            ruleId: r.probe_id,
+            level: r.severity === "CRITICAL" || r.severity === "HIGH" ? "error" : "warning",
+            message: { text: r.reasoning },
+          })),
+        }],
+      };
+      console.log(JSON.stringify(sarif, null, 2));
     } else {
       printReport(report);
 
@@ -553,8 +636,18 @@ const guardCmd = program
   .option("-o, --output <format>", "output format: terminal|json|sarif", "terminal")
   .option("--save <path>", "save JSON report to file")
   .option("--reset-baselines", "re-trust all MCP servers")
+  .option("--model <name>", "LLM model for judge-based skill scanning")
+  .option("--api-key <key>", "API key for LLM judge")
+  .option("--ollama-url <url>", "Ollama base URL for LLM judge", "http://localhost:11434")
+  .option("--llm-all", "Run LLM on all skills, not just suspicious")
   .action(async (scanPath: string | undefined, opts: Record<string, any>) => {
     try {
+      // Load config defaults
+      const savedConfig = loadConfig();
+      if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+      if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+      if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
+
       // Handle --reset-baselines
       if (opts.resetBaselines) {
         const store = new BaselineStore();
@@ -606,6 +699,39 @@ const guardCmd = program
       });
 
       const report = await guard.run();
+
+      // LLM Judge pass (optional)
+      if (opts.model) {
+        const { LLMJudge } = await import("../src/llm-judge.js");
+        const judge = new LLMJudge({
+          model: opts.model,
+          apiKey: opts.apiKey,
+          baseUrl: opts.model?.startsWith("ollama/") ? opts.ollamaUrl + "/v1" : undefined,
+        });
+        const skills = report.skill_results ?? [];
+        const toJudge = opts.llmAll
+          ? skills
+          : skills.filter((s: any) => s.verdict === "warning");
+        for (const skill of toJudge) {
+          if (skill.path && existsSync(skill.path)) {
+            try {
+              const skillContent = readFileSync(skill.path, "utf-8");
+              const result = await judge.analyzeSkill(skillContent, skill.name);
+              if (result.verdict === "danger" && skill.verdict !== "danger") {
+                skill.verdict = "danger";
+                skill.findings.push(...result.findings.map((f: any) => ({
+                  code: "LLM_JUDGE",
+                  severity: f.severity ?? "medium",
+                  title: f.title,
+                  description: f.reasoning ?? "",
+                  evidence: f.evidence ?? "",
+                  remediation: "",
+                })));
+              }
+            } catch { /* LLM judge is best-effort */ }
+          }
+        }
+      }
 
       // Compute delta if diff is enabled
       let delta: { total_new: number; total_resolved: number; total_changed: number; entries: DeltaEntry[] } | null = null;
@@ -741,6 +867,408 @@ guardCmd
     } catch (err) {
       console.error(`Error: ${err}`);
       process.exit(2);
+    }
+  });
+
+// CONFIG command
+program
+  .command("config")
+  .description("Manage local configuration (API keys, LLM settings)")
+  .argument("[action]", "set | show | remove | keys | setup")
+  .argument("[key]", "Config key")
+  .argument("[value]", "Value to set")
+  .action((action, key, value) => {
+    switch (action) {
+      case "set":
+        if (!key || !value) { console.error("Usage: agentseal config set <key> <value>"); process.exit(1); }
+        if (!CONFIG_KEYS.includes(key as any)) {
+          console.error(`Unknown config key: ${key}`);
+          console.error(`Valid keys: ${CONFIG_KEYS.join(", ")}`);
+          process.exit(1);
+        }
+        saveConfigKey(key, value);
+        console.log(`\x1b[32mSaved\x1b[0m ${key}`);
+        break;
+      case "show":
+        console.log(showConfig());
+        break;
+      case "remove":
+        if (!key) { console.error("Usage: agentseal config remove <key>"); process.exit(1); }
+        removeConfigKey(key);
+        console.log(`\x1b[32mRemoved\x1b[0m ${key}`);
+        break;
+      case "keys":
+        console.log("Valid config keys:");
+        for (const k of CONFIG_KEYS) console.log(`  ${k}`);
+        break;
+      case "setup":
+        console.log("\n  LLM Provider Setup\n");
+        console.log("  Ollama (local):     agentseal config set model ollama/qwen3");
+        console.log("  OpenAI:             agentseal config set api-key sk-...");
+        console.log("                      agentseal config set model gpt-4o");
+        console.log("  Anthropic:          agentseal config set api-key sk-ant-...");
+        console.log("                      agentseal config set model claude-sonnet-4-5-20250929");
+        console.log();
+        break;
+      default:
+        console.log(showConfig());
+        break;
+    }
+  });
+
+// LOGIN command
+program
+  .command("login")
+  .description("Store dashboard credentials")
+  .option("--api-url <url>", "Dashboard API URL", "https://agentseal.org/api/v1")
+  .option("--api-key <key>", "Dashboard API key")
+  .action((opts) => {
+    if (!opts.apiKey) { console.error("Error: --api-key is required"); process.exit(1); }
+    saveCredentials(opts.apiUrl, opts.apiKey);
+    console.log("\x1b[32mCredentials saved.\x1b[0m");
+  });
+
+// ACTIVATE command
+program
+  .command("activate")
+  .description("Activate a Pro license key")
+  .argument("[key]", "Your license key")
+  .action((key) => {
+    if (!key) { console.error("Usage: agentseal activate <license-key>"); process.exit(1); }
+    saveLicense(key);
+    console.log(`\x1b[32mLicense activated.\x1b[0m`);
+  });
+
+program
+  .command("profiles")
+  .description("List available scan profiles")
+  .action(() => {
+    console.log(listProfiles());
+  });
+
+program
+  .command("registry")
+  .description("Manage the MCP server registry")
+  .argument("[action]", "info | update | list", "info")
+  .option("--api-url <url>", "Custom API URL", "https://agentseal.org/api/v1")
+  .action(async (action, opts) => {
+    switch (action) {
+      case "info":
+        console.log("  AgentSeal MCP Server Registry");
+        console.log("  Ships with bundled trust scores. Use 'update' to fetch latest.");
+        break;
+      case "update":
+        console.log("  Fetching latest registry data...");
+        try {
+          const results = await bulkCheck([], opts.apiUrl);
+          console.log(`  \x1b[32mUpdated.\x1b[0m ${Object.keys(results).length} servers in registry.`);
+        } catch (err) {
+          console.error(`  Error fetching registry: ${err}`);
+          process.exit(1);
+        }
+        break;
+      case "list":
+        console.log("  Use the web registry at https://agentseal.org/mcp for full browsing.");
+        console.log("  Or run: agentseal guard --verbose to see registry scores for your servers.");
+        break;
+      default:
+        console.error(`Unknown action: ${action}. Use info, update, or list.`);
+        process.exit(1);
+    }
+  });
+
+program
+  .command("fix")
+  .description("Fix dangerous skills and harden prompts")
+  .option("--from-guard", "Load guard report and quarantine dangerous skills")
+  .option("--from-scan", "Load scan report and generate hardened prompt")
+  .option("--report <file>", "Path to report file (instead of latest)")
+  .option("--auto", "Quarantine all DANGER skills without prompting")
+  .option("--dry-run", "Show what would be done without doing it")
+  .option("--list-quarantine", "List quarantined skills")
+  .option("--restore <name>", "Restore a quarantined skill by name")
+  .option("--output <file>", "Save hardened prompt to file")
+  .action(async (opts) => {
+    const R = "\x1b[0m";
+    const G = "\x1b[32m";
+    const RED = "\x1b[31m";
+    const B = "\x1b[1m";
+
+    if (opts.listQuarantine) {
+      const entries = listQuarantine();
+      if (entries.length === 0) { console.log("No quarantined skills."); return; }
+      console.log(`\n  ${B}Quarantined Skills${R}\n`);
+      for (const e of entries) {
+        console.log(`  ${RED}●${R} ${e.skill_name}  ${e.reason ?? ""}  (${e.timestamp})`);
+      }
+      console.log();
+      return;
+    }
+
+    if (opts.restore) {
+      try {
+        const restored = restoreSkill(opts.restore);
+        console.log(`${G}Restored:${R} ${restored}`);
+      } catch (err) {
+        console.error(`Error: ${err}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (opts.fromGuard) {
+      const report = loadGuardReport(opts.report);
+      const fixable = getFixableSkills(report);
+      if (fixable.length === 0) { console.log("No dangerous skills to fix."); return; }
+      console.log(`\n  ${B}Fixable Skills${R} (${fixable.length})\n`);
+      for (const s of fixable) {
+        const label = opts.dryRun ? "[DRY RUN] Would quarantine" : "Quarantining";
+        console.log(`  ${RED}●${R} ${label}: ${s.name}`);
+        if (!opts.dryRun) {
+          quarantineSkill(s.path, s.name, s.findings?.[0]?.title);
+        }
+      }
+      console.log();
+      return;
+    }
+
+    if (opts.fromScan) {
+      const report = loadScanReport(opts.report);
+      const remediation = generateRemediation(report as unknown as ScanReport);
+      if (remediation.combined_fix) {
+        if (opts.output) {
+          writeFileSync(opts.output, remediation.combined_fix);
+          console.log(`${G}Hardened prompt saved to${R} ${opts.output}`);
+        } else {
+          console.log(`\n${B}Hardened Prompt:${R}\n`);
+          console.log(remediation.combined_fix);
+        }
+      } else {
+        console.log("No remediation needed — scan looks clean.");
+      }
+      return;
+    }
+
+    console.log("Usage: agentseal fix --from-guard | --from-scan | --list-quarantine | --restore <name>");
+  });
+
+program
+  .command("shield")
+  .description("Continuously monitor your machine for AI agent threats")
+  .option("--no-notify", "Disable desktop notifications")
+  .option("--debounce <seconds>", "Seconds to wait after change before scanning", "2")
+  .option("-q, --quiet", "Suppress terminal output")
+  .option("--reset-baselines", "Reset MCP server baselines before starting")
+  .action(async (opts) => {
+    printBanner();
+    console.log("  Starting Shield — continuous monitoring...");
+    console.log("  Press Ctrl+C to stop.\n");
+
+    if (opts.resetBaselines) {
+      const store = new BaselineStore();
+      store.reset();
+      console.log("  Baselines reset.\n");
+    }
+
+    const shield = new Shield({
+      debounceSeconds: parseFloat(opts.debounce),
+      notify: opts.notify !== false,
+      onEvent: (eventType, filePath, summary) => {
+        if (!opts.quiet) {
+          const color = eventType === "threat" ? "\x1b[31m" : eventType === "warning" ? "\x1b[33m" : "\x1b[90m";
+          console.log(`  ${color}[${eventType.toUpperCase()}]\x1b[0m ${filePath} — ${summary}`);
+        }
+      },
+    });
+
+    process.on("SIGINT", () => {
+      console.log("\n  Shield stopped.");
+      shield.stop();
+      process.exit(0);
+    });
+
+    const { dirsWatched, filesWatched } = shield.start();
+    console.log(`  Watching ${dirsWatched} director${dirsWatched === 1 ? "y" : "ies"} (${filesWatched} individual files).\n`);
+
+    // Keep the process alive until SIGINT
+    await new Promise<void>(() => {});
+  });
+
+program
+  .command("scan-mcp")
+  .description("Scan MCP server configurations for security issues")
+  .option("--server <name>", "Scan only this server (by name)")
+  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("--save <file>", "Save JSON report to file")
+  .option("--min-score <score>", "Exit code 1 if any server scores below threshold")
+  .option("-v, --verbose", "Show individual tool findings")
+  .option("--reset-baselines", "Reset all MCP server baselines")
+  .action(async (opts) => {
+    printBanner();
+
+    if (opts.resetBaselines) {
+      const store = new BaselineStore();
+      const count = store.reset();
+      console.log(`Reset ${count} baseline(s).\n`);
+    }
+
+    const checker = new MCPConfigChecker();
+    console.log("  Discovering MCP servers...\n");
+
+    // Read MCP configs from well-known locations and check each server
+    const { getWellKnownConfigs, stripJsonComments } = await import("../src/machine-discovery.js");
+    const { readFileSync: rfs, existsSync: efs } = await import("node:fs");
+    const { homedir } = await import("node:os");
+
+    const home = homedir();
+    const plat = process.platform === "darwin" ? "Darwin" : process.platform === "win32" ? "Windows" : "Linux";
+    const configs = getWellKnownConfigs();
+
+    const serverDicts: Array<Record<string, any>> = [];
+    for (const cfg of configs) {
+      const paths = cfg.paths as Record<string, string | undefined>;
+      let cfgPath = paths[plat] ?? paths["all"];
+      if (!cfgPath) continue;
+      cfgPath = cfgPath.replace(/^~/, home);
+      if (!efs(cfgPath)) continue;
+
+      let data: Record<string, any>;
+      try {
+        const raw = rfs(cfgPath, "utf-8");
+        data = JSON.parse(stripJsonComments(raw));
+      } catch {
+        continue;
+      }
+
+      let servers: Record<string, any> = {};
+      for (const key of ["mcpServers", "servers", "context_servers"]) {
+        if (key in data && typeof data[key] === "object" && data[key] !== null) {
+          servers = data[key];
+          break;
+        }
+      }
+
+      for (const [srvName, srvCfg] of Object.entries(servers)) {
+        if (typeof srvCfg !== "object" || srvCfg === null) continue;
+        if (opts.server && srvName !== opts.server) continue;
+        serverDicts.push({ name: srvName, source_file: cfgPath, ...srvCfg });
+      }
+    }
+
+    if (serverDicts.length === 0) {
+      console.log("  No MCP servers found. Check your agent configuration.");
+      return;
+    }
+
+    console.log(`  Found ${serverDicts.length} server(s). Scanning...\n`);
+
+    const results: MCPScanResult[] = [];
+    for (const serverDict of serverDicts) {
+      const result = checker.check(serverDict);
+      const verdictStr = verdictFromFindings(result.findings);
+      const toolsList = serverDict.tools;
+      results.push({
+        server_name: result.name,
+        verdict: verdictStr,
+        findings: result.findings.map((f) => ({
+          code: f.code,
+          severity: f.severity,
+          title: f.title,
+          detail: f.description,
+        })),
+        tools_count: Array.isArray(toolsList) ? toolsList.length : 0,
+      });
+    }
+
+    if (opts.output === "json") {
+      console.log(JSON.stringify(results, null, 2));
+    } else {
+      renderMCPResults(results, opts.verbose);
+    }
+
+    if (opts.save) {
+      writeFileSync(opts.save, JSON.stringify(results, null, 2));
+      console.log(`Report saved to ${opts.save}`);
+    }
+
+    if (opts.minScore) {
+      const threshold = parseInt(opts.minScore);
+      const failing = results.filter((r) => r.trust_score !== undefined && r.trust_score < threshold);
+      if (failing.length > 0) {
+        console.error(`\nCI check failed: ${failing.length} server(s) below threshold ${threshold}`);
+        process.exit(1);
+      }
+    }
+  });
+
+program
+  .command("watch")
+  .description("Run canary regression scan (5 probes, for CI/cron)")
+  .option("-p, --prompt <text>", "System prompt to test")
+  .option("-f, --file <path>", "Path to file containing system prompt")
+  .option("--url <url>", "HTTP endpoint URL to test")
+  .option("-m, --model <name>", "Model to test")
+  .option("--api-key <key>", "API key")
+  .option("--ollama-url <url>", "Ollama base URL", "http://localhost:11434")
+  .option("--canary-probes <csv>", "Comma-separated probe IDs")
+  .option("--min-score <score>", "Exit code 1 if below")
+  .option("-o, --output <format>", "Output format: terminal, json", "terminal")
+  .option("--name <name>", "Agent name", "My Agent")
+  .option("--concurrency <n>", "Max parallel probes", "3")
+  .option("--timeout <seconds>", "Timeout per probe", "30")
+  .argument("[prompt]", "Quick inline prompt")
+  .action(async (inlinePrompt, opts) => {
+    // Load config defaults
+    const savedConfig = loadConfig();
+    if (!opts.model && savedConfig["model"]) opts.model = savedConfig["model"];
+    if (!opts.apiKey && savedConfig["api-key"]) opts.apiKey = savedConfig["api-key"];
+    if (!opts.ollamaUrl && savedConfig["ollama-url"]) opts.ollamaUrl = savedConfig["ollama-url"];
+
+    const systemPrompt = opts.prompt ?? inlinePrompt ?? (opts.file ? readFileSync(opts.file, "utf-8").trim() : undefined);
+    if (!systemPrompt && !opts.url) {
+      console.error("Error: Provide --prompt, --file, or --url");
+      process.exit(1);
+    }
+
+    const canaryProbes = selectCanaryProbes(opts.canaryProbes);
+    console.log(`  Running ${canaryProbes.length} canary probes...\n`);
+
+    let validator: AgentValidator;
+    if (opts.url) {
+      validator = AgentValidator.fromEndpoint({
+        url: opts.url,
+        agentName: opts.name,
+        concurrency: parseInt(opts.concurrency),
+        timeoutPerProbe: parseFloat(opts.timeout),
+        probes: canaryProbes as any,
+      });
+    } else {
+      validator = await buildValidator(systemPrompt!, {
+        model: opts.model,
+        apiKey: opts.apiKey,
+        ollamaUrl: opts.ollamaUrl,
+        name: opts.name,
+        concurrency: parseInt(opts.concurrency),
+        timeout: parseFloat(opts.timeout),
+        probes: canaryProbes,
+      });
+    }
+
+    const report = await validator.run();
+
+    if (opts.output === "json") {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`  Score: ${report.trust_score.toFixed(1)}/100`);
+      console.log(`  Blocked: ${report.probes_blocked}  Leaked: ${report.probes_leaked}`);
+    }
+
+    if (opts.minScore) {
+      const threshold = parseInt(opts.minScore);
+      if (report.trust_score < threshold) {
+        console.error(`\n  CI check failed: ${report.trust_score.toFixed(1)} < ${threshold}`);
+        process.exit(1);
+      }
     }
   });
 

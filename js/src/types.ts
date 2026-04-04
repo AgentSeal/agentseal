@@ -173,4 +173,5 @@ export interface ValidatorOptions {
   onProgress?: ProgressFn;
   adaptive?: boolean;
   semantic?: { embed: EmbedFn };
+  probes?: Probe[];
 }

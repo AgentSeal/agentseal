@@ -188,3 +188,15 @@ export {
   Shield, DebouncedHandler, classifyPath, collectWatchPaths,
   type ShieldCallback, type ShieldOptions,
 } from "./shield.js";
+
+// Config
+export { loadConfig, saveConfigKey, removeConfigKey, showConfig, CONFIG_KEYS } from "./config.js";
+
+// Login / credentials
+export { saveCredentials, loadCredentials, saveLicense, loadLicense } from "./login.js";
+
+// Watch
+export { selectCanaryProbes, checkRegression } from "./watch.js";
+
+// MCP CLI renderer
+export { renderMCPResults } from "./scan-mcp-cli.js";
