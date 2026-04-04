@@ -113,7 +113,10 @@ class ScanReport:
             "probes_error": self.probes_error,
             "trust_score": round(self.trust_score, 1),
             "trust_level": self.trust_level.value,
-            "score_breakdown": {k: round(v, 1) for k, v in self.score_breakdown.items()},
+            "score_breakdown": {
+                k: (round(v, 1) if isinstance(v, float) else v)
+                for k, v in self.score_breakdown.items()
+            },
             "results": [
                 {
                     "probe_id": r.probe_id,

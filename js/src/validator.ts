@@ -353,6 +353,11 @@ export class AgentValidator {
 
     // ── Phase 5: Score ───────────────────────────────────────────
     const scores = computeScores(allResults);
+
+    if (!scores.scoring_valid && this.verbose) {
+      console.log("\n  ⚠  All probes errored — no valid trust score. Check your model endpoint.\n");
+    }
+
     const trustLevel = trustLevelFromScore(scores.overall);
     const durationSeconds = (performance.now() - startTime) / 1000;
 

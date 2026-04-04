@@ -331,13 +331,13 @@ program
 
     const report = await validator.run();
 
-    if (report.score_breakdown && !(report.score_breakdown as any).scoring_valid) {
+    if (report.score_breakdown && !report.score_breakdown.scoring_valid) {
       console.error("\n\x1b[31mError: All probes failed. Trust score is not valid.\x1b[0m");
       console.error("Check your model endpoint is running and accessible.\n");
       process.exit(2);
     }
 
-    const errorRate = (report.score_breakdown as any)?.error_rate ?? 0;
+    const errorRate = report.score_breakdown?.error_rate ?? 0;
     if (errorRate > 0.5) {
       console.log(`\n\x1b[33mWarning: ${report.probes_error}/${report.total_probes} probes errored. Score may be unreliable.\x1b[0m\n`);
     }
