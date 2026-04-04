@@ -11,6 +11,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadConfig, saveConfigKey, removeConfigKey, showConfig, CONFIG_KEYS } from "../src/config.js";
+import { saveCredentials, saveLicense } from "../src/login.js";
 import { Guard } from "../src/guard.js";
 import {
   resolveProjectConfig,
@@ -745,6 +747,70 @@ guardCmd
       console.error(`Error: ${err}`);
       process.exit(2);
     }
+  });
+
+// CONFIG command
+program
+  .command("config")
+  .description("Manage local configuration (API keys, LLM settings)")
+  .argument("[action]", "set | show | remove | keys | setup")
+  .argument("[key]", "Config key")
+  .argument("[value]", "Value to set")
+  .action((action, key, value) => {
+    switch (action) {
+      case "set":
+        if (!key || !value) { console.error("Usage: agentseal config set <key> <value>"); process.exit(1); }
+        saveConfigKey(key, value);
+        console.log(`\x1b[32mSaved\x1b[0m ${key}`);
+        break;
+      case "show":
+        console.log(showConfig());
+        break;
+      case "remove":
+        if (!key) { console.error("Usage: agentseal config remove <key>"); process.exit(1); }
+        removeConfigKey(key);
+        console.log(`\x1b[32mRemoved\x1b[0m ${key}`);
+        break;
+      case "keys":
+        console.log("Valid config keys:");
+        for (const k of CONFIG_KEYS) console.log(`  ${k}`);
+        break;
+      case "setup":
+        console.log("\n  LLM Provider Setup\n");
+        console.log("  Ollama (local):     agentseal config set model ollama/qwen3");
+        console.log("  OpenAI:             agentseal config set api-key sk-...");
+        console.log("                      agentseal config set model gpt-4o");
+        console.log("  Anthropic:          agentseal config set api-key sk-ant-...");
+        console.log("                      agentseal config set model claude-sonnet-4-5-20250929");
+        console.log();
+        break;
+      default:
+        console.log(showConfig());
+        break;
+    }
+  });
+
+// LOGIN command
+program
+  .command("login")
+  .description("Store dashboard credentials")
+  .option("--api-url <url>", "Dashboard API URL", "https://agentseal.org/api/v1")
+  .option("--api-key <key>", "Dashboard API key")
+  .action((opts) => {
+    if (!opts.apiKey) { console.error("Error: --api-key is required"); process.exit(1); }
+    saveCredentials(opts.apiUrl, opts.apiKey);
+    console.log("\x1b[32mCredentials saved.\x1b[0m");
+  });
+
+// ACTIVATE command
+program
+  .command("activate")
+  .description("Activate a Pro license key")
+  .argument("[key]", "Your license key")
+  .action((key) => {
+    if (!key) { console.error("Usage: agentseal activate <license-key>"); process.exit(1); }
+    saveLicense(key);
+    console.log(`\x1b[32mLicense activated.\x1b[0m`);
   });
 
 program.parse();
