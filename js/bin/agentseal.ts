@@ -881,6 +881,11 @@ program
     switch (action) {
       case "set":
         if (!key || !value) { console.error("Usage: agentseal config set <key> <value>"); process.exit(1); }
+        if (!CONFIG_KEYS.includes(key as any)) {
+          console.error(`Unknown config key: ${key}`);
+          console.error(`Valid keys: ${CONFIG_KEYS.join(", ")}`);
+          process.exit(1);
+        }
         saveConfigKey(key, value);
         console.log(`\x1b[32mSaved\x1b[0m ${key}`);
         break;
@@ -1091,7 +1096,7 @@ program
 
 program
   .command("scan-mcp")
-  .description("Runtime MCP server scanner — connect, analyze, score")
+  .description("Scan MCP server configurations for security issues")
   .option("--server <name>", "Scan only this server (by name)")
   .option("-o, --output <format>", "Output format: terminal, json", "terminal")
   .option("--save <file>", "Save JSON report to file")
@@ -1161,6 +1166,7 @@ program
     for (const serverDict of serverDicts) {
       const result = checker.check(serverDict);
       const verdictStr = verdictFromFindings(result.findings);
+      const toolsList = serverDict.tools;
       results.push({
         server_name: result.name,
         verdict: verdictStr,
@@ -1170,7 +1176,7 @@ program
           title: f.title,
           detail: f.description,
         })),
-        tools_count: 0,
+        tools_count: Array.isArray(toolsList) ? toolsList.length : 0,
       });
     }
 
