@@ -59,10 +59,10 @@ def get_setup_guide() -> str:
     # Or: export OPENAI_API_KEY=sk-xxxxx
 
   MiniMax:
-    agentseal config set model MiniMax-M2.7
+    agentseal config set model MiniMax-M3
     agentseal config set api-key xxxxx
     # Or: export MINIMAX_API_KEY=xxxxx
-    # Models: MiniMax-M2.7, MiniMax-M2.7-highspeed, MiniMax-M2.5, MiniMax-M2.5-highspeed
+    # Models: MiniMax-M3 (default), MiniMax-M2.7, MiniMax-M2.7-highspeed
 
   OpenRouter (any model, one API key):
     agentseal config set model openrouter/anthropic/claude-haiku-4-5-20251001
