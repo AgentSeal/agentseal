@@ -203,6 +203,9 @@ def main():
                              help="Ollama base URL (default: http://localhost:11434)")
     scan_parser.add_argument("--litellm-url", type=str, default=None,
                              help="LiteLLM proxy URL (e.g. http://localhost:4000)")
+    scan_parser.add_argument("--smart", action="store_true",
+                             help="After the scan, run a bounded adaptive (PAIR) attacker "
+                                  "that escalates against the target — BYOK, NOT scored (teaser)")
 
     # HTTP endpoint options
     scan_parser.add_argument("--message-field", type=str, default="message",
@@ -2205,6 +2208,31 @@ async def _run_scan(args):
 
     if report.score_breakdown.get("error_rate", 0) > 0.5:
         print(f"\n\x1b[33mWarning: {report.probes_error}/{report.total_probes} probes errored. Score may be unreliable.\x1b[0m\n")
+
+    # ── Adaptive deep findings (--smart): bounded BYOK PAIR teaser, NON-SCORED ──
+    if getattr(args, "smart", False) and system_prompt and args.model:
+        try:
+            from agentseal.deep_findings import run_deep_findings, DEFAULT_OBJECTIVES
+            from agentseal.adaptive import AdaptiveBudget
+            _attacker_llm = _build_agent_fn(
+                model=args.model, system_prompt="", api_key=args.api_key,
+                ollama_url=args.ollama_url, litellm_url=args.litellm_url,
+            )
+            _deep = await run_deep_findings(
+                agent_fn=validator.agent_fn, attacker_llm=_attacker_llm,
+                objectives=DEFAULT_OBJECTIVES[:1],
+                budget=AdaptiveBudget(max_queries=3, success_threshold=8.0),
+            )
+            if args.output == "terminal":
+                print("  \033[1mAdaptive (--smart · BYOK · not scored):\033[0m")
+                for _f in _deep:
+                    _v = getattr(_f["verdict"], "value", str(_f["verdict"])).upper()
+                    _c = "\033[31m" if _v == "LEAKED" else "\033[32m"
+                    print(f"    {_c}{_v}\033[0m  {_f['objective']}  (after {_f['queries']} adaptive turns)")
+                print()
+        except Exception as _e:
+            if args.output == "terminal":
+                print(f"  \033[33mAdaptive scan skipped: {_e}\033[0m")
 
     # ── Genome scan (if --genome) ─────────────────────────────────────
     genome_report = None
