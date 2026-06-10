@@ -1161,8 +1161,8 @@ def _run_guard(args):
     # ── Auto-save report ──────────────────────────────────────────
     try:
         save_report(json.loads(report.to_json()), "guard")
-    except Exception:
-        pass  # Best-effort save
+    except Exception as e:
+        print(f"Warning: failed to save report: {e}", file=sys.stderr)
 
     # ── History: save raw report (before ignore_findings filtering) ──
     _hist_scan_path = str(Path(scan_path).resolve()) if scan_path else None
@@ -2226,8 +2226,8 @@ async def _run_scan(args):
     # ── Auto-save report ─────────────────────────────────────────────
     try:
         save_report(report.to_dict(), "scan")
-    except Exception:
-        pass  # Best-effort save
+    except Exception as e:
+        print(f"Warning: failed to save report: {e}", file=sys.stderr)
 
     # ── Output ───────────────────────────────────────────────────────
     if args.output == "terminal":
