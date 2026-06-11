@@ -71,6 +71,29 @@ _ProbeResult = _schemas.ProbeResult
 _ScanReport = _schemas.ScanReport
 _ChatFn = _schemas.ChatFn
 
+
+async def _run_multi_turn(agent_fn, turns, timeout):
+    """Drive a multi-turn probe with ACCUMULATING conversation history.
+
+    The old engine sent each turn as an isolated, stateless call, so the model
+    never saw prior turns and escalation (Crescendo-style) attacks were a no-op.
+    Here each turn is sent together with the prior turns and the agent's prior
+    responses, so escalation actually functions. Returns every turn's response
+    joined, so a leak on ANY turn is detected downstream.
+    """
+    history: list[tuple[str, str]] = []
+    responses: list[str] = []
+    for turn in turns:
+        if history:
+            convo = "\n".join(f"User: {u}\nAssistant: {a}" for u, a in history)
+            message = f"{convo}\nUser: {turn}"
+        else:
+            message = turn
+        resp = await asyncio.wait_for(agent_fn(message), timeout=timeout)
+        responses.append(resp)
+        history.append((turn, resp))
+    return "\n".join(responses)
+
 # ═══════════════════════════════════════════════════════════════════════
 # BACKWARD COMPAT - deprecated re-exports
 # "from agentseal.validator import Verdict" still works but warns.
@@ -336,11 +359,7 @@ class AgentValidator:
                 t0 = time.time()
                 try:
                     if probe.get("is_multi_turn"):
-                        response = ""
-                        for msg in probe["payload"]:
-                            response = await asyncio.wait_for(
-                                self.agent_fn(msg), timeout=self.timeout
-                            )
+                        response = await _run_multi_turn(self.agent_fn, probe["payload"], self.timeout)
                     else:
                         response = await asyncio.wait_for(
                             self.agent_fn(probe["payload"]), timeout=self.timeout
@@ -406,11 +425,7 @@ class AgentValidator:
                 t0 = time.time()
                 try:
                     if probe.get("is_multi_turn"):
-                        response = ""
-                        for msg in probe["payload"]:
-                            response = await asyncio.wait_for(
-                                self.agent_fn(msg), timeout=self.timeout
-                            )
+                        response = await _run_multi_turn(self.agent_fn, probe["payload"], self.timeout)
                     else:
                         response = await asyncio.wait_for(
                             self.agent_fn(probe["payload"]), timeout=self.timeout
@@ -487,11 +502,7 @@ class AgentValidator:
                         t0 = time.time()
                         try:
                             if probe.get("is_multi_turn"):
-                                response = ""
-                                for msg in probe["payload"]:
-                                    response = await asyncio.wait_for(
-                                        self.agent_fn(msg), timeout=self.timeout
-                                    )
+                                response = await _run_multi_turn(self.agent_fn, probe["payload"], self.timeout)
                             else:
                                 response = await asyncio.wait_for(
                                     self.agent_fn(probe["payload"]), timeout=self.timeout

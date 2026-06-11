@@ -20,7 +20,7 @@ def build_ollama_chat(model: str, system_prompt: str, ollama_url: str = "http://
 
     async def chat(message: str) -> str:
         url = f"{ollama_url}/api/chat"
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=180) as client:
             resp = await client.post(url, json={
                 "model": model,
                 "messages": [
