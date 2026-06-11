@@ -206,6 +206,10 @@ def main():
     scan_parser.add_argument("--smart", action="store_true",
                              help="After the scan, run a bounded adaptive (PAIR) attacker "
                                   "that escalates against the target — BYOK, NOT scored (teaser)")
+    scan_parser.add_argument("--attacker-model", type=str, default=None,
+                             help="Model that drives the --smart adaptive attacker "
+                                  "(default: same as --model). A less-aligned model attacks far "
+                                  "more effectively, since aligned models refuse to generate attacks.")
 
     # HTTP endpoint options
     scan_parser.add_argument("--message-field", type=str, default="message",
@@ -2214,8 +2218,9 @@ async def _run_scan(args):
         try:
             from agentseal.deep_findings import run_deep_findings, DEFAULT_OBJECTIVES
             from agentseal.adaptive import AdaptiveBudget
+            _attacker_model = getattr(args, "attacker_model", None) or args.model
             _attacker_llm = _build_agent_fn(
-                model=args.model, system_prompt="", api_key=args.api_key,
+                model=_attacker_model, system_prompt="", api_key=args.api_key,
                 ollama_url=args.ollama_url, litellm_url=args.litellm_url,
             )
             _deep = await run_deep_findings(
