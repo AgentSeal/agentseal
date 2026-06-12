@@ -285,7 +285,7 @@ The npm package provides the same CLI commands (`agentseal guard`, `scan`, `scan
 |---|---|:---:|
 | OpenAI | `--model gpt-4o` | `OPENAI_API_KEY` |
 | Anthropic | `--model claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
-| MiniMax | `--model MiniMax-M2.7` | `MINIMAX_API_KEY` |
+| MiniMax | `--model MiniMax-M3` | `MINIMAX_API_KEY` |
 | Ollama | `--model ollama/llama3.1:8b` | None |
 | LiteLLM | `--model any --litellm-url http://...` | Varies |
 | HTTP | `--url http://your-agent.com/chat` | None |
