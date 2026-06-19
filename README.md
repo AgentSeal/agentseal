@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/getagentseal-agentseal-badge.png)](https://mseep.ai/app/getagentseal-agentseal)
+
 <p align="center">
   <a href="https://agentseal.org">
     <img src="assets/logo-white.png" height="96" alt="AgentSeal" />
