@@ -14,7 +14,7 @@ def build_minimax_chat(model: str, system_prompt: str, api_key: str = None):
     MiniMax provides an OpenAI-compatible API at https://api.minimax.io/v1.
 
     Args:
-        model: Model name (e.g. "MiniMax-M2.7", "MiniMax-M2.7-highspeed").
+        model: Model name (e.g. "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed").
         system_prompt: The system prompt to use.
         api_key: API key (falls back to MINIMAX_API_KEY env).
     """
