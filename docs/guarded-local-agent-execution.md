@@ -209,11 +209,11 @@ behavior**, not secret values:
 - Read the **names** of evidence files (e.g., a `verify.json` exists, a
   `redactions.json` exists), not the contents of credential files those
   artifacts reference.
-- Treat the presence of a project policy file (for example a
-  `project-policy.json` declaring `allowed_commands` and `blocked_files`) as a
-  signal that the pattern is in use. Parse only the declarative fields
-  (`allowed_commands`, `protected_paths`, `blocked_files`). Do not read the
-  files those fields point at.
+- Treat the presence of a project policy file (for example
+  `.patchwarden/project-policy.json`) as a signal that the pattern is in use.
+  Parse only its declarative fields, such as `allowed_commands`,
+  `protected_paths`, and `high_risk_commands`. Do not read the files those
+  fields point at.
 - If a policy file itself appears to contain a secret value (a literal token,
   key, or cookie), flag it as a finding rather than echoing the value.
 
@@ -262,12 +262,15 @@ result.
 
 This pattern is derived from the security contract used by local-first agent
 bridges that confine execution rather than expose a remote shell. PatchWarden is
-one such executor; its `.patchwarden/project-policy.json`
-(`allowed_commands`, `protected_paths`, `high_risk_commands`) and
-`.patchwarden/config.json` are a concrete instance of the declarative policy
-described above. The pattern itself does not depend on any specific executor:
-any tool that enforces the five pillars and emits bounded evidence satisfies it,
-and any detection tool that reads only policy metadata can verify it.
+one such executor. It resolves private runtime configuration from the path in
+`PATCHWARDEN_CONFIG`, then `patchwarden.config.json` or `.patchwarden.json` in
+the current working directory. Its repository policy is separately stored at
+`.patchwarden/project-policy.json` and uses fields such as `allowed_commands`,
+`protected_paths`, and `high_risk_commands`. These are concrete instances of the
+declarative policy described above. The pattern itself does not depend on any
+specific executor: any tool that enforces the five pillars and emits bounded
+evidence satisfies it, and any detection tool that reads only policy metadata
+can verify it.
 
 When integrating a guarded executor with AgentSeal, point
 `allowed_agents` / `allowed_mcp_servers` at the executor's registered agents
